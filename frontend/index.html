@@ -15,6 +15,7 @@
     <script src="./assets/vue.global.js"></script>
     
     <style>
+        /* 另外注意：class="..."即 HTML 属性。相当于给元素起个绰号（用来通过 CSS 化妆）。 */
         /* --- 核心布局样式 --- */
         body {
             background-color: #f5f7fa; /* 柔和的灰白色背景 */
@@ -108,7 +109,7 @@
 
 <body>
     
-   <!-- 挂载点。Vue.js 运行后会解析这个 div 内部的所有内容。 -->
+   <!-- ID 名起为 app, 将此处作为挂载点。Vue.js 运行后会解析这个 div 内部的所有内容。 -->
     <div id="app" class="container">
         
         <!-- 导航栏：绘制顶部的 Tab 切换按钮 -->
@@ -116,6 +117,7 @@
             <div 
                 class="nav-item" 
                 :class="{ active: currentTab === 'home' }" 
+                <!-- click是vue语法，意思是当用户用鼠标点击这里时，执行后面的命令 -->
                 @click="switchTab('home')">
                 🏠 主页
             </div>
@@ -214,35 +216,18 @@
                     profile: null,
                     loading: false,
                     systemStatus: null,
-                    serverTime: '--:--:--',
-                    timer: null,
-                    isOnline: false
                 }
             },
-            // computed: {  // 计算属性（没搞懂）
-            //     // 根据 data 里的变量自动计算出新值。比如根据 isOnline 算出是要显示绿色还是红色。
-            //     connectionStatus() {
-            //         return this.isOnline ? 'online' : (this.loading ? '' : 'error')
-            //     },
-            //     connectionText() {
-            //         if (this.loading) return 'Connecting...'
-            //         return this.isOnline ? 'System Online' : 'Offline'
-            //     }
-            // },
             mounted() {  // 生命周期钩子, 相当于 Python 类的 __init__ 或“开机启动项”
                 // 页面加载完那一瞬间，自动执行 fetchProfile() 去拉后端数据。
                 this.fetchProfile()
-                // 启动一个本地时钟模拟心跳
-                this.timer = setInterval(() => {
-                    this.serverTime = new Date().toLocaleTimeString()
-                }, 1000)
             },
-            methods: {  // 核心逻辑
+            methods: {  // 核心逻辑函数
+
                 // 切换 Tab 的逻辑
                 switchTab(tabName) {
                     this.currentTab = tabName
-                    
-                    // 如果切换到了 'status' 且没有数据，才去请求
+                    // 如果切换到了 'status' 且没有数据，才去通过fetchStatus()请求
                     if (tabName === 'status' && !this.systemStatus) {
                         this.fetchStatus()
                     }
