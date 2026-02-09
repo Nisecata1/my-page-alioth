@@ -116,6 +116,7 @@
         <nav class="nav-tabs">
             <div 
                 class="nav-item" 
+                <!-- 下面 active 的意思是: 如果 currentTab 的值等于 'home'，就给这个 div 加上名为 active 的 CSS 类（让它变亮）；否则就不加。 -->
                 :class="{ active: currentTab === 'home' }" 
                 <!-- click是vue语法，意思是当用户用鼠标点击这里时，执行后面的命令 -->
                 @click="switchTab('home')">
@@ -151,9 +152,11 @@
                     </span>
                 </div>
             </div>
+
             <div v-else style="text-align: center; color: #999;">
                 <p aria-busy="true">正在连接个人数据...</p>
             </div>
+
         </div>
         
         <div v-if="currentTab === 'status'" class="white-card">
@@ -198,7 +201,7 @@
                 <a href="/data/apps/player/" class="tool-link">🎵 音乐播放器</a>
                 <a href="/data/apps/game/" class="tool-link">🎮 网页游戏</a>
                 <a href="/files/" class="tool-link">📂 文件管理</a>
-                <a href="/jupyter" class="tool-link">📓 Jupyter Lab</a>
+                <a href="https://github.com/Nisecata1" class="tool-link">📓 Jupyter Lab</a>
             </div>
         </div>
 
