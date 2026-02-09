@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <!-- 移动端视口设置，让页面按设备宽度渲染，初始缩放 1 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 浏览器标签页标题/收藏夹名称/搜索结果标题 -->
+    <title>Laplas' Homepage</title>
+    
+    <!-- 引入本地下载好的 Pico.css 和执行 Vue cdn -->
+    <!-- 具体的文件传输交给nginx，配置里配置了通配路由 “/” -->
+    <link rel="stylesheet" href="./assets/pico.min.css">
+    <script src="./assets/vue.global.js"></script>
+
+    <!-- 引入 Vue 3 和 Pico.css -->
+    <!-- defer是script的一个属性，JS 脚本文件会并行下载（不阻塞 HTML 解析），后台先把页面结构解析完，再按顺序跑脚本 -->
+    <!-- <script defer src="https://unpkg.com/vue@3/dist/vue.global.js"></script> -->
+    <!-- <script defer src="./app.js"></script> -->
+    <!-- 下面的link负责联网下载css样式并应用 -->
+    <!-- 效果是：你页面里的基础元素（比如 body、nav、article、按钮、表单等）会自动变得更“现代”和统一，不用你自己写很多 CSS。你用到的 class="container" 等样式也会更好看 -->
+    <!-- <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@1.*/css/pico.min.css"> -->
+    
+    <style>
+        /* 这里写一点点自定义样式，让它不像纯文档，更像仪表盘 */
+        body > main {
+            padding-top: 2rem;
+            max-width: 900px; /* 限制最大宽度，防止大屏太散 */
+            margin: 0 auto;
+        }
+        /* 状态指示灯 */
+        .status-dot {
+            display: inline-block; width: 10px; height: 10px; 
+            border-radius: 50%; margin-right: 6px;
+            background-color: #555; transition: 0.3s;
+        }
+        .status-dot.online { background-color: #2ecc71; box-shadow: 0 0 8px #2ecc71; }
+        .status-dot.error { background-color: #e74c3c; }
+
+        /* 应用卡片网格布局 */
+        .app-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+        .app-card {
+            text-decoration: none;
+            background-color: #1e1e1e;
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid #333;
+            transition: transform 0.2s, background-color 0.2s;
+            color: var(--color); /* 继承文字颜色 */
+        }
+        .app-card:hover {
+            transform: translateY(-5px);
+            background-color: #2d2d2d;
+            border-color: #2ecc71;
+        }
+        .emoji-icon { font-size: 3rem; display: block; margin-bottom: 0.5rem; }
+    </style>
+
+</head>
+
+<body>
+    
+    <div id="app" class="container">
+        <!-- 导航栏 -->
+        <nav>
+            <ul class="menu">
+                <li><a href="/">Home</a></li>
+                <li><a href="/api/profile">profile</a></li>
+                <!-- #projects：不请求服务器，只是在当前页面跳到 id="projects" 的位置（修改 URL 的 hash）。 -->
+                <li><a href="#projects">Projects</a></li>
+                <li><a href="/data/apps/player/">Player</a></li>
+                <li><a href="/data/apps/game/">Game</a></li>
+            </ul>
+        </nav>
+        
+        <!-- <article>：语义标签（表示一块独立内容），本身不自动带“加载效果”。 -->
+        <article v-if="loading" aria-busy="true">
+            正在加载个人信息...
+        </article>
+
+        <article v-else-if="profile">
+            <header>
+                <h1>👋 Hello, I'm {{ profile.name }}</h1>
+            </header>
+            <p><strong>Role:</strong> {{ profile.role }}</p>
+            
+            <footer>
+                <strong>Tech Stack:</strong>
+                <span v-for="skill in profile.skills" :key="skill" role="button" class="outline" style="margin-right: 5px;">
+                    {{ skill }}
+                </span>
+            </footer>
+        </article>
+
+        <article v-else class="headings">
+            <h4 style="color: red;">⚠️ Connection Failed</h4>
+            <p>请检查后端服务是否启动 (python backend/main.py)，或确认静态文件 frontend/data/profile.json 存在</p>
+        </article>
+        
+        <!-- 静态链接：请求本地的html文件或者跳转到某个网页 -->
+        <section>
+            <h3>Applications</h3>
+            <div class="app-grid">
+                <a href="/data/apps/player/" class="app-card">
+                    <span class="emoji-icon">🎵</span>
+                    <strong>Music Player</strong>
+                </a>
+                <a href="/data/apps/game/" class="app-card">
+                    <span class="emoji-icon">🎮</span>
+                    <strong>Retro Game</strong>
+                </a>
+                <a href="/files/" class="app-card">
+                    <span class="emoji-icon">📂</span>
+                    <strong>File Browser</strong>
+                </a>
+                <a href="https://github.com/Nisecata1" target="_blank" class="app-card">
+                    <span class="emoji-icon">🐙</span>
+                    <strong>GitHub</strong>
+                </a>
+            </div>
+        </section>
+
+    </div>
+
+</body>
+
+</html>

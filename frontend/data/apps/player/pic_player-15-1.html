@@ -1,0 +1,1591 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>WebP 播放器 v21 (预加载增强版)</title>
+    <style>
+        /* --- 全局 --- */
+        body { margin: 0; background: #050505; color: #fff; height: 100vh; overflow: hidden; font-family: "Segoe UI", sans-serif; user-select: none; display: flex; }
+        
+        /* --- 主画面 --- */
+        #main-area { flex: 1; position: relative; height: 100%; background: #000; overflow: hidden; cursor: default; }
+        
+        .viewer-layer { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; opacity: 0; 
+            transform-origin: center center;
+            will-change: transform, opacity;
+            cursor: grab; 
+        }
+        .viewer-layer.active { opacity: 1; z-index: 10; }
+        .viewer-layer.grabbing { cursor: grabbing; }
+
+        .fit-contain { object-fit: contain; }
+        .fit-cover { object-fit: cover; }
+        .fit-none { object-fit: none; }
+
+        /* --- 顶部触发区 & 控制栏 --- */
+        #top-trigger-zone { position: fixed; top: 0; left: 0; right: 0; height: 80px; z-index: 150; }
+        #controls-container {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 200;
+            display: flex; gap: 15px; align-items: center;
+            background: rgba(20, 20, 20, 0.9); padding: 10px 25px; border-radius: 50px;
+            border: 1px solid #444; backdrop-filter: blur(10px);
+            transition: transform 0.3s, opacity 0.3s;
+        }
+        #controls-container.hidden-mode { transform: translate(-50%, -150%); opacity: 0; pointer-events: none; }
+        #top-trigger-zone:hover ~ #controls-container, #controls-container:hover { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+
+        button.ctrl-btn { background: transparent; color: white; border: none; padding: 5px 10px; cursor: pointer; font-size: 20px; transition: 0.2s; }
+        button.ctrl-btn:hover { color: #4CAF50; transform: scale(1.1); }
+        button.active-btn { color: #4CAF50; }
+
+        /* --- 右上角功能键 --- */
+        #top-right-controls { 
+            position: fixed; top: 20px; right: 20px; z-index: 200; 
+            display: flex; gap: 10px; transition: opacity 0.3s; 
+        }
+        .circle-btn {
+            background: rgba(0,0,0,0.6); border: 1px solid #666; color: #fff;
+            width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; font-size: 18px; transition: 0.2s;
+        }
+        .circle-btn:hover { background: #4CAF50; border-color: #4CAF50; transform: scale(1.1); }
+        .hidden-mode-active #top-right-controls { opacity: 0; pointer-events: none; }
+        #top-trigger-zone:hover ~ #top-right-controls, #top-right-controls:hover { opacity: 1; pointer-events: auto; }
+
+        /* --- 左上角元数据 --- */
+        #meta-info {
+            position: fixed; top: 0; left: 0; z-index: 100;
+            background: rgba(0, 0, 0, 0.7); padding: 8px 12px; 
+            border-bottom-right-radius: 8px; pointer-events: none; display: none; 
+            backdrop-filter: blur(6px);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            border-right: 1px solid rgba(255,255,255,0.1);
+            transition: opacity 0.2s;
+        }
+        .meta-row { display: block; font-size: 12px; color: #ddd; text-shadow: 1px 1px 2px #000; line-height: 1.5; white-space: nowrap; }
+        .meta-index { color: #4CAF50; font-weight: bold; font-size: 14px; }
+        .meta-val { color: #ccc; max-width: 350px; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: bottom;}
+        .meta-label { color: #888; margin-right: 5px; font-size: 11px; }
+
+        /* --- 侧边栏通用 --- */
+        .sidebar-panel {
+            position: fixed; top: 0; bottom: 0; width: 320px;
+            background: rgba(30, 30, 30, 0.98); border-left: 1px solid #444;
+            transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+            display: flex; flex-direction: column; z-index: 300; 
+            box-shadow: -5px 0 20px rgba(0,0,0,0.8);
+            right: 0; transform: translateX(100%); 
+        }
+        .sidebar-panel.open { transform: translateX(0); }
+        .sidebar-header { padding: 0 15px; height: 40px; border-bottom: 1px solid #444; display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: bold; color: #fff; flex-shrink: 0; background: #252525; }
+        .close-btn { background: none; border: none; color: #aaa; cursor: pointer; font-size: 18px; }
+        .close-btn:hover { color: #fff; }
+
+        /* --- 拖拽调整大小的手柄 --- */
+        #playlist-resize-handle {
+            position: absolute; left: 0; top: 0; bottom: 0; width: 6px;
+            background: transparent; cursor: ew-resize; z-index: 310;
+        }
+        #playlist-resize-handle:hover, #playlist-resize-handle.resizing {
+            background: #4CAF50; box-shadow: 0 0 10px #4CAF50;
+        }
+
+        /* 配置栏样式 */
+        .cfg-group { padding: 20px; border-bottom: 1px solid #333; }
+        .cfg-title { font-size: 12px; color: #4CAF50; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        .cfg-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .cfg-label { font-size: 14px; color: #ddd; }
+        input[type="number"] { width: 50px; background: #222; border: 1px solid #555; color: #fff; padding: 4px; border-radius: 4px; text-align: center; }
+        
+        .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #555; transition: .4s; border-radius: 20px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #4CAF50; }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .cfg-footer { padding: 20px; font-size: 12px; color: #666; text-align: center; margin-top: auto; border-top: 1px solid #333; line-height: 1.5; }
+        .reset-btn { width: 100%; background: #333; color: #ddd; border: 1px solid #555; padding: 8px; border-radius: 4px; cursor: pointer; margin-top: 10px; transition: 0.2s; }
+        .reset-btn:hover { background: #444; color: #fff; border-color: #888; }
+
+        details { width: 100%; }
+        summary { cursor: pointer; color: #4CAF50; font-size: 13px; font-weight: bold; outline: none; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+        summary::-webkit-details-marker { display: none; }
+        summary::after { content: "▼"; font-size: 10px; transition: transform 0.2s; }
+        details[open] summary::after { transform: rotate(180deg); }
+        .details-content { margin-top: 15px; padding-left: 5px; animation: slideDown 0.2s ease-out; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+        .key-btn { background: #222; border: 1px solid #444; color: #fff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-family: monospace; min-width: 60px; text-align: center; }
+        .key-btn:hover { border-color: #888; background: #333; }
+        .key-btn.recording { background: #4CAF50; border-color: #4CAF50; color: #000; animation: pulse 1s infinite; }
+
+        /* --- 快捷键容器与标签样式 --- */
+        .key-container {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .key-badge {
+            background: #222;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: monospace;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .key-badge:hover {
+            border-color: #888;
+            background: #333;
+        }
+        .key-badge.recording {
+            background: #4CAF50;
+            border-color: #4CAF50;
+            color: #000;
+            animation: pulse 1s infinite;
+        }
+        .key-delete {
+            margin-left: 4px;
+            cursor: pointer;
+            color: #888;
+            font-size: 14px;
+            line-height: 1;
+            user-select: none;
+        }
+        .key-delete:hover {
+            color: #f44336;
+        }
+        .key-add {
+            background: #333;
+            border: 1px dashed #666;
+            color: #666;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: monospace;
+        }
+        .key-add:hover {
+            color: #fff;
+            border-color: #888;
+        }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+
+        /* --- 紧凑画廊列表 (v20) --- */
+        #playlist-list { 
+            flex: 1; overflow-y: auto; padding: 5px; margin: 0; list-style: none; 
+            /* 密集网格 */
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+            gap: 2px; /* 极小的间隙 */
+            justify-content: center;
+
+            --thumb-size: 100px; 
+        }
+        
+        .list-item { 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            cursor: pointer; 
+            width: var(--thumb-size); 
+            /* 无 Padding，无 Margin，极致紧凑 */
+            border-radius: 0;
+            position: relative;
+            box-sizing: border-box;
+            border: 2px solid transparent; /* 预留边框位置 */
+            transition: transform 0.1s;
+        }
+        
+        /* 选中状态：使用内描边，不影响布局 */
+        .list-item.active { 
+            border-color: #4CAF50; 
+            z-index: 2; /* 浮起 */
+        }
+        
+        .thumb-box { 
+            width: 100%; 
+            height: var(--thumb-size); /* 正方形 */
+            background: #111; 
+            display: flex; align-items: center; justify-content: center; 
+            overflow: hidden;
+        }
+        
+        .thumb-canvas, .thumb-img { 
+            width: 100%; height: 100%; 
+            object-fit: contain; 
+            display: block; /* 去除 inline 间隙 */
+        }
+        
+        .file-name-list { 
+            font-size: 11px; color: #aaa; background: #222;
+            width: 100%; text-align: center;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; 
+            padding: 2px 0;
+        }
+
+        #playlist-list.hide-text .file-name-list { display: none; }
+
+        /* --- 连续翻页容器样式 --- */
+        /* 覆盖主画面的横向连续翻页容器，默认隐藏 */
+        #continuous-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+            display: none;
+            background: #000;
+        }
+        #continuous-strip {
+            display: flex;
+            height: 100%;
+        }
+        /* 单个图片高度占满容器，高宽比自适应 */
+        .continuous-img {
+            height: 100%;
+            object-fit: contain;
+            /* 默认完全可见，淡入淡出效果在加载时设置 */
+            opacity: 1;
+            transition: none;
+        }
+        /* 定制连续模式滚动条样式 */
+        #continuous-container::-webkit-scrollbar {
+            height: 8px;
+        }
+        #continuous-container::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 4px;
+        }
+        #continuous-container::-webkit-scrollbar-track {
+            background: #111;
+        }
+        
+        /* --- 列表底部工具栏 (v20) --- */
+        .playlist-footer { 
+            position: relative;
+            background: #1a1a1a; 
+            border-top: 1px solid #333; 
+            flex-shrink: 0;
+        }
+
+        /* 底部常驻条 */
+        .footer-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 15px; height: 30px;
+        }
+        .footer-info { font-size: 11px; color: #666; }
+        .footer-btn { 
+            background: #333; border: 1px solid #555; color: #ddd; 
+            padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;
+            display: flex; align-items: center; gap: 5px;
+        }
+        .footer-btn:hover { background: #444; border-color: #888; color: #fff; }
+        .footer-btn.active { background: #1b5e20; border-color: #4CAF50; }
+
+        /* 弹出菜单 */
+        #list-options-menu {
+            position: absolute; bottom: 100%; left: 0; right: 0;
+            background: rgba(35, 35, 35, 0.98);
+            border-top: 1px solid #444;
+            padding: 15px;
+            transform: translateY(100%); opacity: 0; pointer-events: none;
+            transition: transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28), opacity 0.2s;
+            display: flex; flex-direction: column; gap: 10px;
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.5);
+            z-index: 20;
+        }
+        #list-options-menu.visible {
+            transform: translateY(0); opacity: 1; pointer-events: auto;
+        }
+
+        #drop-zone { border: 3px dashed #555; padding: 80px; text-align: center; color: #888; border-radius: 20px; position: absolute; pointer-events: none; top: 50%; left: 50%; transform: translate(-50%,-50%); }
+    </style>
+</head>
+<body id="body-root">
+
+    <div id="top-trigger-zone"></div>
+
+    <div id="meta-info">
+        <div class="meta-row" id="meta-row-index"><span class="meta-index" id="val-index">0 / 0</span></div>
+        <div class="meta-row" id="meta-row-name"><span class="meta-val" id="val-name">filename.webp</span></div>
+        <div class="meta-row" id="meta-row-size"><span class="meta-label">SIZE:</span><span class="meta-val" id="val-size">0 KB</span></div>
+        <div class="meta-row" id="meta-row-date"><span class="meta-label">DATE:</span><span class="meta-val" id="val-date">2026/01/01</span></div>
+    </div>
+
+    <div id="main-area">
+        <div id="drop-zone">
+            <h1>📂 拖入文件夹</h1>
+            <p>Ctrl+A 全选 WebP/IMG 拖入<br><br><small style="color:#555">v21: 独立预加载设置</small></p>
+        </div>
+        <img id="layer-a" class="viewer-layer fit-contain" src="">
+        <img id="layer-b" class="viewer-layer fit-contain" src="">
+        <!-- 连续翻页容器，包含横向排列的图片 -->
+        <div id="continuous-container">
+            <div id="continuous-strip"></div>
+        </div>
+    </div>
+
+    <div id="controls-container">
+        <button class="ctrl-btn" id="btn-hide-mode" title="沉浸模式">👁</button>
+        <div style="width: 1px; height: 20px; background: #555;"></div>
+        <button class="ctrl-btn" id="btn-prev">⏮</button>
+        <button class="ctrl-btn" id="btn-play">▶</button>
+        <button class="ctrl-btn" id="btn-next">⏭</button>
+        <div style="width: 1px; height: 20px; background: #555;"></div>
+        <span style="font-size: 12px; color: #aaa;">间隔:</span>
+        <input type="number" id="interval-input" value="3" step="0.5" style="width:35px; background:#333; color:#fff; border:none; text-align:center;">
+    </div>
+
+    <!-- v21: 调整按钮顺序，设置(S)移至最右 -->
+    <div id="top-right-controls">
+        <div class="circle-btn" id="btn-fullscreen" title="全屏 (F)">⛶</div>
+        <div class="circle-btn" id="btn-scale" title="填充模式 (Click)">↔</div>
+        <div class="circle-btn" id="btn-toggle-list" title="列表 (L)">☰</div>
+        <div class="circle-btn" id="btn-settings" title="配置 (S)">⚙</div>
+    </div>
+
+    <div id="settings-panel" class="sidebar-panel">
+        <div class="sidebar-header">
+            <span>配置中心</span>
+            <button class="close-btn" id="btn-close-settings">✕</button>
+        </div>
+        
+        <div class="cfg-group" style="background: rgba(76, 175, 80, 0.1);">
+            <div class="cfg-title" style="color:#81c784">系统</div>
+            <div class="cfg-row">
+                <label class="cfg-label">记住所有配置</label>
+                <label class="switch">
+                    <input type="checkbox" id="cfg-remember">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="cfg-group">
+            <details>
+                <summary>快捷键配置 (展开)</summary>
+                <div class="details-content">
+                    <div class="cfg-row"><label class="cfg-label">打开/关闭列表</label><div class="key-container" id="key-toggleList-container"></div></div>
+                    <div class="cfg-row"><label class="cfg-label">全屏切换</label><div class="key-container" id="key-fullscreen-container"></div></div>
+                    <div class="cfg-row"><label class="cfg-label">打开配置</label><div class="key-container" id="key-settings-container"></div></div>
+                    <div class="cfg-row"><label class="cfg-label">显隐信息开关</label><div class="key-container" id="key-info-container"></div></div>
+                    <!-- 新增：上一张/下一张快捷键配置 -->
+                    <div class="cfg-row"><label class="cfg-label">上一张</label><div class="key-container" id="key-prev-container"></div></div>
+                    <div class="cfg-row"><label class="cfg-label">下一张</label><div class="key-container" id="key-next-container"></div></div>
+                </div>
+            </details>
+        </div>
+
+        <!-- v22: 新增翻页设置 -->
+        <div class="cfg-group">
+            <div class="cfg-title">翻页设置</div>
+            <div class="cfg-row">
+                <label class="cfg-label">翻页模式</label>
+                <select id="cfg-flip-mode" style="background:#222; color:#fff; border:1px solid #555; padding:4px; border-radius:4px;">
+                    <option value="single">单页翻页</option>
+                    <option value="continuous">左→右连续翻页</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- v21: 独立预加载设置 -->
+        <div class="cfg-group">
+            <div class="cfg-title">性能 & 渲染</div>
+            <div class="cfg-row">
+                <label class="cfg-label">预加载 (后一张/Next)</label>
+                <input type="number" id="cfg-preload-next" min="1" max="50">
+            </div>
+            <div class="cfg-row">
+                <label class="cfg-label">预加载 (前一张/Prev)</label>
+                <input type="number" id="cfg-preload-prev" min="0" max="50">
+            </div>
+            <div class="cfg-row">
+                <label class="cfg-label">平滑淡入淡出 (仅单页生效)</label>
+                <label class="switch"><input type="checkbox" id="cfg-fade"><span class="slider"></span></label>
+            </div>
+            <div class="cfg-row">
+                <label class="cfg-label">过渡时长 (秒)</label>
+                <input type="number" id="cfg-fade-duration" step="0.05" min="0.1" max="5.0">
+            </div>
+        </div>
+        
+        <div class="cfg-group">
+            <div class="cfg-title">左上角信息显示</div>
+            <div class="cfg-row">
+                <label class="cfg-label">显示页码 (Index)</label>
+                <label class="switch"><input type="checkbox" id="cfg-show-index"><span class="slider"></span></label>
+            </div>
+            <div class="cfg-row">
+                <label class="cfg-label">显示文件名 (Name)</label>
+                <label class="switch"><input type="checkbox" id="cfg-show-name"><span class="slider"></span></label>
+            </div>
+            <div class="cfg-row">
+                <label class="cfg-label">显示文件大小 (Size)</label>
+                <label class="switch"><input type="checkbox" id="cfg-show-size"><span class="slider"></span></label>
+            </div>
+            <div class="cfg-row">
+                <label class="cfg-label">显示修改时间 (Date)</label>
+                <label class="switch"><input type="checkbox" id="cfg-show-date"><span class="slider"></span></label>
+            </div>
+        </div>
+
+        <div class="cfg-footer">
+            <div style="font-weight:bold; margin-bottom:5px;">WebP Player v21</div>
+            <button class="reset-btn" id="btn-reset-cfg">↺ 恢复默认配置</button>
+        </div>
+    </div>
+
+    <!-- v20: 列表面板 -->
+    <div id="playlist-panel" class="sidebar-panel">
+        <!-- 拖拽手柄 -->
+        <div id="playlist-resize-handle"></div>
+
+        <div class="sidebar-header">
+            <span>画廊 (<span id="list-count">0</span>)</span>
+            <button class="close-btn" id="btn-close-list">✕</button>
+        </div>
+        
+        <!-- 列表容器 -->
+        <ul id="playlist-list" class="hide-text"></ul>
+
+        <!-- 底部工具栏 -->
+        <div class="playlist-footer">
+            <!-- 弹出菜单 -->
+            <div id="list-options-menu">
+                <div class="cfg-row" style="margin:0">
+                    <label class="cfg-label">显示文件名</label>
+                    <label class="switch"><input type="checkbox" id="btn-show-filenames"><span class="slider"></span></label>
+                </div>
+                <div class="cfg-row" style="margin:0">
+                    <label class="cfg-label">动态小图 (GIF/WebP)</label>
+                    <label class="switch"><input type="checkbox" id="btn-dynamic-thumbs"><span class="slider"></span></label>
+                </div>
+                <div class="cfg-row" style="margin:0">
+                    <label class="cfg-label">拖拽追加模式</label>
+                    <label class="switch"><input type="checkbox" id="btn-append-mode"><span class="slider"></span></label>
+                </div>
+            </div>
+
+            <!-- 常驻条 -->
+            <div class="footer-bar">
+                <!-- 新增缩略图尺寸滑块 -->
+                <input type="range" id="thumb-size-range" min="50" max="500" step="10" value="100" title="缩略图尺寸" style="width:200px; margin-right:8px;">
+                <span class="footer-info">Ctrl+滚轮缩放 | 拖拽扩宽</span>
+                <button class="footer-btn" id="btn-toggle-list-opts">⚙ 设置</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DEFAULT_CONFIG = {
+            preloadNext: 3, // 默认向后预加载3张
+            preloadPrev: 1, // 默认向前预加载1张
+            enableFade: false,
+            fadeDuration: 0.15,
+            showIndex: true, showName: false, showSize: false, showDate: false,
+            remember: false,
+            showListNames: false,
+            useDynamicThumbs: false,
+            thumbSize: 100, 
+            listWidth: 320, 
+            // 默认快捷键映射。支持多个按键，以数组形式存储。当为字符串时自动转换为单元素数组。
+            keyMap: { toggleList: 'l', fullscreen: 'f', settings: 's', info: 'Tab', prev: 'ArrowLeft', next: 'ArrowRight' }
+            ,
+            // 翻页模式：'single' 表示单页翻页，'continuous' 表示从左到右连续翻页（预留）
+            pageMode: 'single'
+        };
+        
+        let config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+
+        const layerA = document.getElementById('layer-a');
+        const layerB = document.getElementById('layer-b');
+        const playlistList = document.getElementById('playlist-list');
+        const settingsPanel = document.getElementById('settings-panel');
+        const playlistPanel = document.getElementById('playlist-panel');
+        const metaInfo = document.getElementById('meta-info');
+        const mainArea = document.getElementById('main-area');
+        // 连续翻页容器和内层元素
+        const continuousContainer = document.getElementById('continuous-container');
+        const continuousStrip = document.getElementById('continuous-strip');
+        
+        let fileList = [];
+        let currentIndex = 0;
+        let isPlaying = false;
+        let playTimer = null;
+        let scaleMode = 0;
+        let isHiddenMode = false;
+        let activeLayer = 0;
+        let isAppendMode = false;
+        let globalInfoVisible = true;
+        
+        // 缩放相关
+        let currentZoom = 1.0; let panX = 0; let panY = 0; 
+        let isDragging = false; let dragStartX = 0; let dragStartY = 0;
+        // 连续模式拖拽起始滚动位置
+        let startScrollLeft = 0;
+        // 连续模式的 img 元素数组及其加载状态
+        let continuousImgEls = [];
+        // 标记每个索引的加载状态（true 表示已加载 src）
+        let loadedFlags = [];
+        // 存储每个图像的宽高比（宽/高），用于固定宽度
+        let ratioList = [];
+        // 标记最近是否进行过拖拽，用于阻止拖拽后触发的点击
+        let justDragged = false;
+
+        // 连续模式虚拟化：记录上一次加载的范围
+        let lastLoadStart = 0;
+        let lastLoadEnd = -1;
+
+        function init() {
+            loadConfig(); 
+            syncUI();     
+            bindEvents(); 
+            bindDragEvents(); 
+            bindSidebarResize();
+            applyLayerTransition();
+            applyListStyles(); 
+            updateMetadataUI();
+
+            // 应用翻页模式
+            applyPageMode();
+        }
+
+        function loadConfig() {
+            const saved = localStorage.getItem('webp_player_v20_cfg');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    // 兼容旧配置：如果有 preloadCount 但没有 preloadNext，则迁移
+                    if (parsed.preloadCount !== undefined && parsed.preloadNext === undefined) {
+                        parsed.preloadNext = parsed.preloadCount;
+                        parsed.preloadPrev = 1; // 默认
+                    }
+                    config = { ...DEFAULT_CONFIG, ...parsed, keyMap: { ...DEFAULT_CONFIG.keyMap, ...(parsed.keyMap || {}) } };
+                } catch (e) { console.error("Config load failed", e); }
+            }
+        }
+
+        function saveConfig() {
+            if (config.remember) localStorage.setItem('webp_player_v20_cfg', JSON.stringify(config));
+            else localStorage.removeItem('webp_player_v20_cfg');
+        }
+
+        function resetConfig() {
+            config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+            saveConfig();
+            syncUI();
+            applyLayerTransition();
+            applyListStyles();
+            updateMetadataUI();
+            renderPlaylist(true);
+            // 重置后应用翻页模式
+            applyPageMode();
+        }
+
+        function syncUI() {
+            // 系统与渲染 - v21
+            document.getElementById('cfg-preload-next').value = config.preloadNext;
+            document.getElementById('cfg-preload-prev').value = config.preloadPrev;
+            
+            document.getElementById('cfg-fade').checked = config.enableFade;
+            document.getElementById('cfg-fade-duration').value = config.fadeDuration;
+            document.getElementById('cfg-remember').checked = config.remember;
+            
+            // 信息面板
+            document.getElementById('cfg-show-index').checked = config.showIndex;
+            document.getElementById('cfg-show-name').checked = config.showName;
+            document.getElementById('cfg-show-size').checked = config.showSize;
+            document.getElementById('cfg-show-date').checked = config.showDate;
+            
+            // 列表面板
+            document.getElementById('btn-show-filenames').checked = config.showListNames;
+            document.getElementById('btn-dynamic-thumbs').checked = config.useDynamicThumbs;
+
+            // 翻页模式
+            const flipSel = document.getElementById('cfg-flip-mode');
+            if (flipSel) flipSel.value = config.pageMode || 'single';
+
+            // 缩略图尺寸滑块
+            const thumbRange = document.getElementById('thumb-size-range');
+            if (thumbRange) thumbRange.value = config.thumbSize;
+            
+            // 快捷键 UI：确保配置为数组并重建 UI
+            ensureKeyMapArrays();
+            buildAllKeyUI();
+        }
+
+        function applyListStyles() {
+            playlistList.style.setProperty('--thumb-size', `${config.thumbSize}px`);
+            playlistPanel.style.width = `${config.listWidth}px`;
+            
+            if (config.showListNames) playlistList.classList.remove('hide-text');
+            else playlistList.classList.add('hide-text');
+        }
+
+        /**
+         * 确保 keyMap 中每个属性都是数组。
+         * 将字符串转换为单元素数组，空或未定义的转换为空数组。
+         */
+        function ensureKeyMapArrays() {
+            const keys = ['toggleList', 'fullscreen', 'settings', 'info', 'prev', 'next'];
+            keys.forEach(k => {
+                let val = config.keyMap[k];
+                if (val === undefined || val === null) {
+                    config.keyMap[k] = [];
+                } else if (Array.isArray(val)) {
+                    // 去除重复值并标准化大小写
+                    const seen = new Set();
+                    const arr = [];
+                    val.forEach(v => {
+                        const low = String(v).toLowerCase();
+                        if (!seen.has(low)) {
+                            seen.add(low);
+                            arr.push(v);
+                        }
+                    });
+                    config.keyMap[k] = arr;
+                } else {
+                    config.keyMap[k] = [val];
+                }
+            });
+        }
+
+        /**
+         * 创建并显示特定快捷键项的 UI。
+         * @param {string} action 操作名，例如 'toggleList'
+         */
+        function buildKeyUI(action) {
+            const container = document.getElementById(`key-${action}-container`);
+            if (!container) return;
+            // 清空当前内容
+            container.innerHTML = '';
+            const arr = config.keyMap[action] || [];
+            // 渲染每个已配置的快捷键
+            arr.forEach((keyVal, idx) => {
+                const badge = document.createElement('span');
+                badge.className = 'key-badge';
+                badge.innerText = String(keyVal).toUpperCase();
+                badge.title = '点击修改';
+                badge.onclick = () => startEditKey(action, idx, badge);
+
+                // 删除按钮
+                const del = document.createElement('span');
+                del.className = 'key-delete';
+                del.innerText = '✕';
+                del.title = '删除此快捷键';
+                del.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteKey(action, idx);
+                };
+
+                badge.appendChild(del);
+                container.appendChild(badge);
+            });
+            // 添加按钮
+            const addBtn = document.createElement('span');
+            addBtn.className = 'key-add';
+            addBtn.innerText = '+';
+            addBtn.title = '添加快捷键';
+            addBtn.onclick = () => startAddKey(action, addBtn);
+            container.appendChild(addBtn);
+        }
+
+        /**
+         * 重建所有快捷键配置行的 UI。
+         */
+        function buildAllKeyUI() {
+            ['toggleList', 'fullscreen', 'settings', 'info', 'prev', 'next'].forEach(buildKeyUI);
+        }
+
+        /**
+         * 点击“添加快捷键”时调用，进入录制状态。
+         * @param {string} action 操作名
+         * @param {HTMLElement} btn 触发录制的元素
+         */
+        function startAddKey(action, btn) {
+            // 如果已经在录制，忽略
+            if (document.querySelector('.key-badge.recording') || document.querySelector('.key-add.recording')) return;
+            btn.innerText = '...';
+            btn.classList.add('recording');
+            const handler = (e) => {
+                if (['Control','Alt','Shift','Meta'].includes(e.key)) return;
+                e.preventDefault();
+                // 避免重复添加相同键
+                const arr = config.keyMap[action];
+                const low = String(e.key).toLowerCase();
+                const exists = arr.some(v => String(v).toLowerCase() === low);
+                if (!exists) {
+                    arr.push(e.key);
+                    saveConfig();
+                }
+                btn.classList.remove('recording');
+                buildKeyUI(action);
+                document.removeEventListener('keydown', handler, true);
+            };
+            document.addEventListener('keydown', handler, true);
+        }
+
+        /**
+         * 点击已有快捷键时调用，允许替换该键。
+         * @param {string} action 操作名
+         * @param {number} index 替换的下标
+         * @param {HTMLElement} badge 徽标元素
+         */
+        function startEditKey(action, index, badge) {
+            // 如果已经在录制，忽略
+            if (document.querySelector('.key-badge.recording') || document.querySelector('.key-add.recording')) return;
+            badge.innerText = '...';
+            badge.classList.add('recording');
+            const handler = (e) => {
+                if (['Control','Alt','Shift','Meta'].includes(e.key)) return;
+                e.preventDefault();
+                let arr = config.keyMap[action];
+                const low = String(e.key).toLowerCase();
+                // 查找除 index 之外的重复键
+                const existsIdx = arr.findIndex((v, i) => String(v).toLowerCase() === low && i !== index);
+                if (existsIdx !== -1) {
+                    arr.splice(existsIdx, 1);
+                    if (index > existsIdx) index--;
+                }
+                arr[index] = e.key;
+                saveConfig();
+                badge.classList.remove('recording');
+                buildKeyUI(action);
+                document.removeEventListener('keydown', handler, true);
+            };
+            document.addEventListener('keydown', handler, true);
+        }
+
+        /**
+         * 删除指定操作的某个快捷键。
+         * @param {string} action 操作名
+         * @param {number} index 要删除的键索引
+         */
+        function deleteKey(action, index) {
+            const arr = config.keyMap[action];
+            if (!Array.isArray(arr)) return;
+            arr.splice(index, 1);
+            saveConfig();
+            buildKeyUI(action);
+        }
+
+        /**
+         * 根据配置应用翻页模式。当前占位实现，不改变行为。
+         * 当 pageMode 为 'single' 时，使用默认的单页翻页逻辑；
+         * 当 pageMode 为 'continuous' 时，预留连续翻页逻辑。
+         */
+        function applyPageMode() {
+            if (config.pageMode === 'continuous') {
+                // 进入连续模式：隐藏单页图层但保持图像数据，以便返回单页时立即显示
+                layerA.style.visibility = 'hidden';
+                layerB.style.visibility = 'hidden';
+                // 显示横向容器
+                continuousContainer.style.display = 'block';
+                // 渲染连续占位并定位到当前索引
+                renderContinuous();
+                if (fileList.length > 0) {
+                    scrollToIndex(currentIndex);
+                    updateMetadataData(currentIndex + 1, fileList.length, fileList[currentIndex]);
+                    updatePlaylistHighlight();
+                    updateLoadedImages();
+                }
+            } else {
+                // 返回单页模式：显示单页图层，隐藏连续容器
+                continuousContainer.style.display = 'none';
+                layerA.style.visibility = '';
+                layerB.style.visibility = '';
+                // 在单页模式中使用正常的加载逻辑（双层淡入淡出）。
+                // 为避免黑屏，确保旧图层在新图像加载完成前依然可见
+                if (fileList.length > 0) {
+                    loadCurrent();
+                }
+            }
+        }
+
+        function bindSidebarResize() {
+            const handle = document.getElementById('playlist-resize-handle');
+            let isResizing = false;
+
+            handle.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                handle.classList.add('resizing');
+                document.body.style.cursor = 'ew-resize';
+                e.preventDefault();
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                let newWidth = window.innerWidth - e.clientX;
+                if (newWidth < 200) newWidth = 200;
+                if (newWidth > window.innerWidth - 100) newWidth = window.innerWidth - 100;
+                config.listWidth = newWidth;
+                playlistPanel.style.width = `${newWidth}px`;
+            });
+
+            const stopResize = () => {
+                if(isResizing) {
+                    isResizing = false;
+                    handle.classList.remove('resizing');
+                    document.body.style.cursor = '';
+                    saveConfig();
+                }
+            };
+            window.addEventListener('mouseup', stopResize);
+        }
+
+        function bindEvents() {
+            const bindCheck = (id, prop, callback) => {
+                document.getElementById(id).onchange = (e) => { 
+                    config[prop] = e.target.checked; 
+                    if(callback) callback(); 
+                    saveConfig(); 
+                    // 失去焦点，避免切换后左右键焦点仍在此控件导致翻页快捷键失效
+                    if (e.target && typeof e.target.blur === 'function') {
+                        e.target.blur();
+                    }
+                };
+            };
+            
+            // v21: 分别绑定 Next 和 Prev 预加载
+            document.getElementById('cfg-preload-next').onchange = (e) => {
+                config.preloadNext = parseInt(e.target.value) || 3;
+                saveConfig();
+                // 更新连续模式下的加载范围
+                if (config.pageMode === 'continuous') updateLoadedImages();
+            };
+            document.getElementById('cfg-preload-prev').onchange = (e) => {
+                config.preloadPrev = parseInt(e.target.value) || 0;
+                saveConfig();
+                if (config.pageMode === 'continuous') updateLoadedImages();
+            };
+
+            bindCheck('cfg-fade', 'enableFade', applyLayerTransition);
+            document.getElementById('cfg-fade-duration').onchange = (e) => { 
+                config.fadeDuration = Math.max(0.1, parseFloat(e.target.value)); 
+                applyLayerTransition(); saveConfig(); 
+            };
+            
+            bindCheck('cfg-show-index', 'showIndex', updateMetadataUI);
+            bindCheck('cfg-show-name', 'showName', updateMetadataUI);
+            bindCheck('cfg-show-size', 'showSize', updateMetadataUI);
+            bindCheck('cfg-show-date', 'showDate', updateMetadataUI);
+            bindCheck('cfg-remember', 'remember');
+
+            bindCheck('btn-show-filenames', 'showListNames', applyListStyles);
+            bindCheck('btn-dynamic-thumbs', 'useDynamicThumbs', () => renderPlaylist(true));
+            document.getElementById('btn-append-mode').onchange = (e) => isAppendMode = e.target.checked;
+
+            // v20: 列表底部菜单开关
+            const btnListOpts = document.getElementById('btn-toggle-list-opts');
+            const menuListOpts = document.getElementById('list-options-menu');
+            btnListOpts.onclick = () => {
+                btnListOpts.classList.toggle('active');
+                menuListOpts.classList.toggle('visible');
+            };
+
+            // 点击外部关闭菜单
+            document.addEventListener('click', (e) => {
+                if (!btnListOpts.contains(e.target) && !menuListOpts.contains(e.target)) {
+                    btnListOpts.classList.remove('active');
+                    menuListOpts.classList.remove('visible');
+                }
+            });
+
+            // 旧快捷键按钮绑定逻辑已移除，由新的 buildKeyUI 机制替代
+
+            document.getElementById('btn-reset-cfg').onclick = resetConfig;
+
+            playlistPanel.addEventListener('wheel', (e) => {
+                if (!e.ctrlKey) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const delta = e.deltaY > 0 ? -10 : 10;
+                let newSize = config.thumbSize + delta;
+                if (newSize < 50) newSize = 50;
+                if (newSize > 500) newSize = 500;
+                config.thumbSize = newSize;
+                // 更新滑块显示值，保持同步
+                const range = document.getElementById('thumb-size-range');
+                if (range) range.value = config.thumbSize;
+                applyListStyles();
+                saveConfig();
+            }, { passive: false });
+
+            // 缩略图尺寸滑块事件
+            const thumbRange = document.getElementById('thumb-size-range');
+            if (thumbRange) {
+                thumbRange.oninput = (e) => {
+                    const v = parseInt(e.target.value);
+                    if (!isNaN(v)) {
+                        config.thumbSize = v;
+                        applyListStyles();
+                        saveConfig();
+                    }
+                };
+            }
+
+            // 翻页模式下拉菜单
+            const flipSel = document.getElementById('cfg-flip-mode');
+            if (flipSel) {
+                // 当下拉选项改变时立即应用模式
+                const applyFlip = (val) => {
+                    if (val !== config.pageMode) {
+                        config.pageMode = val;
+                        saveConfig();
+                        applyPageMode();
+                    }
+                };
+                flipSel.addEventListener('change', (e) => {
+                    applyFlip(e.target.value);
+                    // 选择后立即移除焦点，避免左右箭头影响下拉框
+                    e.target.blur();
+                });
+                // 某些浏览器在选择后未触发 change，监听 input 保底
+                flipSel.addEventListener('input', (e) => {
+                    applyFlip(e.target.value);
+                    e.target.blur();
+                });
+                // 阻止左右箭头在下拉框内冒泡，以免触发全局翻页
+                flipSel.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                        e.stopPropagation();
+                    }
+                });
+            }
+
+            // 点击画廊面板非项目区域快速跳转滚动位置
+            playlistPanel.addEventListener('click', (e) => {
+                // 获取列表区域的边界
+                const listRect = playlistList.getBoundingClientRect();
+                // 只处理点击在列表内部（不含顶部标题、底部工具栏）
+                if (e.clientY < listRect.top || e.clientY > listRect.bottom) return;
+                // 如果点击了列表项或其子元素，不执行跳转
+                if (e.target.closest('.list-item')) return;
+                const ratio = (e.clientY - listRect.top) / listRect.height;
+                const maxScroll = playlistList.scrollHeight - playlistList.clientHeight;
+                playlistList.scrollTop = ratio * maxScroll;
+            });
+
+            // 在连续翻页模式下，滚动容器时更新当前索引和预加载
+            continuousContainer.addEventListener('scroll', () => {
+                if (config.pageMode === 'continuous') {
+                    updateCurrentIndexFromScroll();
+                }
+            });
+        }
+
+        // --- 播放逻辑 ---
+        function applyLayerTransition() {
+            const t = config.enableFade ? `opacity ${config.fadeDuration}s ease` : "none";
+            layerA.style.transition = t; layerB.style.transition = t;
+        }
+
+        function loadCurrent() {
+            if (fileList.length === 0) return;
+            resetZoom();
+            const file = fileList[currentIndex];
+            updateMetadataData(currentIndex + 1, fileList.length, file);
+
+            const url = URL.createObjectURL(file);
+            const currentImg = activeLayer === 0 ? layerA : layerB;
+            const nextImg = activeLayer === 0 ? layerB : layerA;
+
+            nextImg.src = url;
+            nextImg.onload = () => {
+                nextImg.classList.add('active');
+                currentImg.classList.remove('active');
+                activeLayer = 1 - activeLayer;
+                doPreload(); // 触发新的预加载逻辑
+            };
+            updatePlaylistHighlight();
+        }
+
+        /**
+         * 直接在单页模式显示当前索引的图片，不使用双层淡入淡出。用于从连续模式切换回单页模式时重置状态。
+         */
+        function showSingleCurrent() {
+            if (fileList.length === 0) return;
+            resetZoom();
+            const file = fileList[currentIndex];
+            updateMetadataData(currentIndex + 1, fileList.length, file);
+            // 暂时禁用过渡
+            const prevTA = layerA.style.transition;
+            const prevTB = layerB.style.transition;
+            layerA.style.transition = 'none';
+            layerB.style.transition = 'none';
+            // 加载图片到 layerA
+            const url = URL.createObjectURL(file);
+            layerA.onload = () => {
+                // 恢复过渡
+                applyLayerTransition();
+                URL.revokeObjectURL(url);
+                // 设置层次关系
+                layerA.classList.add('active');
+                layerB.classList.remove('active');
+                activeLayer = 0;
+                updatePlaylistHighlight();
+                doPreload();
+            };
+            layerA.src = url;
+        }
+
+        // --- 变换系统 ---
+        function resetZoom() { currentZoom = 1.0; panX = 0; panY = 0; updateZoomTransform(); }
+        function updateZoomTransform() {
+            const t = `translate(${panX}px, ${panY}px) scale(${currentZoom})`;
+            layerA.style.transform = t; layerB.style.transform = t;
+        }
+        mainArea.addEventListener('wheel', (e) => {
+            // 连续模式：滚轮控制水平滚动；Ctrl+滚轮仍用于缩放
+            if (config.pageMode === 'continuous') {
+                if (e.ctrlKey) {
+                    e.preventDefault();
+                    const d = -e.deltaY * 0.001;
+                    currentZoom = Math.min(Math.max(0.1, currentZoom + d), 10);
+                    updateZoomTransform();
+                } else {
+                    e.preventDefault();
+                    // 滚轮向下时向右滚动，向上时向左滚动
+                    continuousContainer.scrollLeft += e.deltaY;
+                    // 更新当前索引，使元数据与列表同步
+                    updateCurrentIndexFromScroll();
+                }
+                return;
+            }
+            // 单页模式：Ctrl+滚轮用于缩放
+            if (e.ctrlKey) {
+                e.preventDefault();
+                const d = -e.deltaY * 0.001;
+                currentZoom = Math.min(Math.max(0.1, currentZoom + d), 10);
+                updateZoomTransform();
+                return;
+            }
+            // 普通滚轮用于翻页（上下滚动对应左右切换）
+            e.preventDefault();
+            if (e.deltaY > 0) {
+                nextImage();
+            } else if (e.deltaY < 0) {
+                prevImage();
+            }
+        }, { passive: false });
+
+        function bindDragEvents() {
+            mainArea.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                isDragging = true;
+                if (config.pageMode === 'continuous') {
+                    // 在连续模式下，拖拽用于滚动容器
+                    dragStartX = e.clientX;
+                    startScrollLeft = continuousContainer.scrollLeft;
+                    mainArea.classList.add('grabbing');
+                    // 标记拖拽开始，防止释放时触发的 click 被识别
+                    justDragged = true;
+                } else {
+                    // 单页模式下拖拽用于平移缩放视图
+                    dragStartX = e.clientX - panX;
+                    dragStartY = e.clientY - panY;
+                    layerA.classList.add('grabbing');
+                    layerB.classList.add('grabbing');
+                }
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                e.preventDefault();
+                if (config.pageMode === 'continuous') {
+                    const dx = e.clientX - dragStartX;
+                    continuousContainer.scrollLeft = startScrollLeft - dx;
+                    updateCurrentIndexFromScroll();
+                } else {
+                    panX = e.clientX - dragStartX;
+                    panY = e.clientY - dragStartY;
+                    updateZoomTransform();
+                }
+            });
+            const stop = () => {
+                if (!isDragging) return;
+                isDragging = false;
+                if (config.pageMode === 'continuous') {
+                    mainArea.classList.remove('grabbing');
+                    // 拖拽结束后稍后重置 justDragged，防止点击吸附
+                    setTimeout(() => { justDragged = false; }, 100);
+                } else {
+                    layerA.classList.remove('grabbing');
+                    layerB.classList.remove('grabbing');
+                }
+            };
+            window.addEventListener('mouseup', stop);
+            window.addEventListener('mouseleave', stop);
+        }
+
+        // --- 元数据 ---
+        function formatBytes(b) { if(b===0)return '0 B'; const i=Math.floor(Math.log(b)/Math.log(1024)); return parseFloat((b/Math.pow(1024,i)).toFixed(2))+' '+['B','KB','MB','GB'][i]; }
+        function updateMetadataData(idx, total, file) {
+            document.getElementById('val-index').innerText = `${idx} / ${total}`;
+            document.getElementById('val-name').innerText = file.name;
+            document.getElementById('val-size').innerText = formatBytes(file.size);
+            document.getElementById('val-date').innerText = new Date(file.lastModified).toLocaleString('zh-CN',{hour12:false});
+            metaInfo.style.display = 'block'; updateMetadataUI();
+        }
+        function updateMetadataUI() {
+            const set = (id, s) => document.getElementById(id).style.display = s ? 'block' : 'none';
+            set('meta-row-index', config.showIndex); set('meta-row-name', config.showName);
+            set('meta-row-size', config.showSize); set('meta-row-date', config.showDate);
+            const show = globalInfoVisible && (config.showIndex||config.showName||config.showSize||config.showDate);
+            metaInfo.style.opacity = show ? 1 : 0;
+        }
+
+        // v21: 更新的双向预加载
+        function doPreload() {
+            // 在连续模式中由虚拟化逻辑控制加载范围，不再额外预加载
+            if (config.pageMode === 'continuous' || fileList.length === 0) {
+                return;
+            }
+            // 预加载后方 (Next)
+            if(config.preloadNext > 0) {
+                for(let i=1; i<=config.preloadNext; i++) {
+                    const idx = (currentIndex + i) % fileList.length;
+                    const img = new Image();
+                    img.src = URL.createObjectURL(fileList[idx]);
+                }
+            }
+            // 预加载前方 (Prev)
+            if(config.preloadPrev > 0) {
+                for(let i=1; i<=config.preloadPrev; i++) {
+                    let idx = (currentIndex - i) % fileList.length;
+                    if(idx < 0) idx += fileList.length; // 修正负数索引
+                    const img = new Image();
+                    img.src = URL.createObjectURL(fileList[idx]);
+                }
+            }
+        }
+
+        // --- 连续翻页渲染 ---
+        /**
+         * 渲染连续模式中的占位图片元素。
+         * 每个元素设置 aspect-ratio 以保持正确宽度，暂不设置 src，
+         * 具体加载由 updateLoadedImages 控制。
+         */
+        function renderContinuous() {
+            continuousStrip.innerHTML = '';
+            continuousImgEls = [];
+            // 创建每个占位 img
+            for (let i = 0; i < fileList.length; i++) {
+                const img = document.createElement('img');
+                img.className = 'continuous-img';
+                // 使用 CSS 属性保持比例。若 ratioList 未准备，则默认 1
+                const ratio = ratioList && ratioList[i] ? ratioList[i] : 1;
+                // 设置 aspect-ratio，确保即便没有 src 也占据宽度
+                img.style.aspectRatio = ratio;
+                // 防止 flex 收缩
+                img.style.flex = '0 0 auto';
+                // 懒加载属性
+                img.loading = 'lazy';
+                img.decoding = 'async';
+                // 点击切换索引，但在拖拽后首次点击不生效
+                (function(index) {
+                    img.onclick = () => {
+                        if (justDragged) { justDragged = false; return; }
+                        currentIndex = index;
+                        scrollToIndex(currentIndex);
+                        updateMetadataData(currentIndex + 1, fileList.length, fileList[currentIndex]);
+                        updatePlaylistHighlight();
+                        doPreload();
+                        updateLoadedImages();
+                    };
+                })(i);
+                continuousStrip.appendChild(img);
+                continuousImgEls[i] = img;
+            }
+            // 初始加载当前索引周围的图片
+            updateLoadedImages();
+        }
+
+        // 将指定索引的图片滚动至视图左侧
+        function scrollToIndex(idx) {
+            const imgEl = continuousStrip.children[idx];
+            if (!imgEl) return;
+            // 直接将滚动位置设置到目标图片的起始位置，以保证左对齐
+            continuousContainer.scrollLeft = imgEl.offsetLeft;
+            // 更新加载范围，确保新索引周围的图片被加载
+            updateLoadedImages();
+        }
+
+        // 根据滚动条位置确定当前索引并更新状态
+        function updateCurrentIndexFromScroll() {
+            if (fileList.length === 0) return;
+            const containerRect = continuousContainer.getBoundingClientRect();
+            let closest = Infinity;
+            let idx = currentIndex;
+            const children = continuousStrip.children;
+            for (let i = 0; i < children.length; i++) {
+                const rect = children[i].getBoundingClientRect();
+                const dist = Math.abs(rect.left - containerRect.left);
+                if (dist < closest) {
+                    closest = dist;
+                    idx = i;
+                }
+            }
+            if (idx !== currentIndex) {
+                currentIndex = idx;
+                updateMetadataData(currentIndex + 1, fileList.length, fileList[currentIndex]);
+                updatePlaylistHighlight();
+                // 在连续模式中更新加载范围
+                updateLoadedImages();
+                // 预加载双层模式逻辑对于连续模式仅用于按键切换，不需要额外处理
+            }
+        }
+
+        /**
+         * 根据当前索引和预加载配置，在连续模式下动态加载图片。
+         * 仅在当前索引前后指定范围内赋值 src，其余保持空以节省内存。
+         */
+        function updateLoadedImages() {
+            if (config.pageMode !== 'continuous' || fileList.length === 0) return;
+            const n = fileList.length;
+            const preloadNext = Math.max(0, parseInt(config.preloadNext) || 0);
+            const preloadPrev = Math.max(0, parseInt(config.preloadPrev) || 0);
+            // 计算新的加载范围，限制在 [0, n-1]
+            let start = currentIndex - preloadPrev;
+            let end = currentIndex + preloadNext;
+            if (start < 0) start = 0;
+            if (end >= n) end = n - 1;
+            // 卸载旧范围之外的图片
+            if (lastLoadEnd >= lastLoadStart) {
+                for (let i = lastLoadStart; i <= lastLoadEnd; i++) {
+                    if (i < start || i > end) {
+                        if (loadedFlags[i]) {
+                            const img = continuousImgEls[i];
+                            // 清空 src 以释放内存
+                            img.src = '';
+                            img.onload = null;
+                            loadedFlags[i] = false;
+                        }
+                    }
+                }
+            }
+            // 加载新范围内未加载的图片
+            for (let i = start; i <= end; i++) {
+                if (!loadedFlags[i]) {
+                    const file = fileList[i];
+                    const url = URL.createObjectURL(file);
+                    const img = continuousImgEls[i];
+                    img.onload = () => {
+                        // 加载完成后计算比例并更新占位宽度
+                        const w = img.naturalWidth || 1;
+                        const h = img.naturalHeight || 1;
+                        const ratio = h === 0 ? 1 : w / h;
+                        ratioList[i] = ratio;
+                        img.style.aspectRatio = ratio;
+                        URL.revokeObjectURL(url);
+                    };
+                    img.src = url;
+                    loadedFlags[i] = true;
+                }
+            }
+            // 更新记录
+            lastLoadStart = start;
+            lastLoadEnd = end;
+        }
+
+        /**
+         * 计算每个图像的宽高比，并在完成后渲染连续模式。
+         * 读取 naturalWidth/naturalHeight 来保持占位宽度一致。
+         */
+        function computeRatiosAndRender() {
+            const n = fileList.length;
+            ratioList = new Array(n).fill(1);
+            loadedFlags = new Array(n).fill(false);
+            continuousImgEls = [];
+            lastLoadStart = 0;
+            lastLoadEnd = -1;
+            if (n === 0) return;
+            let remaining = n;
+            fileList.forEach((file, idx) => {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => {
+                    const w = img.naturalWidth || 1;
+                    const h = img.naturalHeight || 1;
+                    ratioList[idx] = h === 0 ? 1 : w / h;
+                    URL.revokeObjectURL(url);
+                    remaining--;
+                    if (remaining === 0) {
+                        // 计算完成后渲染并滚动到当前索引
+                        renderContinuous();
+                        scrollToIndex(currentIndex);
+                        updateMetadataData(currentIndex + 1, fileList.length, fileList[currentIndex]);
+                        updatePlaylistHighlight();
+                        doPreload();
+                        updateLoadedImages();
+                    }
+                };
+                img.onerror = () => {
+                    ratioList[idx] = 1;
+                    URL.revokeObjectURL(url);
+                    remaining--;
+                    if (remaining === 0) {
+                        renderContinuous();
+                        scrollToIndex(currentIndex);
+                        updateMetadataData(currentIndex + 1, fileList.length, fileList[currentIndex]);
+                        updatePlaylistHighlight();
+                        doPreload();
+                        updateLoadedImages();
+                    }
+                };
+                img.src = url;
+            });
+        }
+
+        // --- 文件处理 ---
+        ['dragenter','dragover','dragleave','drop'].forEach(e => document.body.addEventListener(e, ev => {ev.preventDefault();ev.stopPropagation();}));
+        document.body.addEventListener('drop', (e) => {
+            let newFiles = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+            if(newFiles.length===0) return;
+            newFiles.sort((a,b)=>a.name.localeCompare(b.name, undefined, {numeric:true, sensitivity:'base'}));
+
+            if(isAppendMode && fileList.length > 0) {
+                fileList = fileList.concat(newFiles);
+                document.getElementById('list-count').innerText = fileList.length;
+                renderPlaylist(false);
+                updateMetadataData(currentIndex+1, fileList.length, fileList[currentIndex]);
+            } else {
+                fileList = newFiles; currentIndex = 0;
+                document.getElementById('drop-zone').style.display = 'none';
+                document.getElementById('list-count').innerText = fileList.length;
+                renderPlaylist(true);
+                loadCurrent();
+            }
+            // 新文件加载时重置比例和加载状态，以便连续模式虚拟化正常工作
+            ratioList = new Array(fileList.length).fill(1);
+            loadedFlags = new Array(fileList.length).fill(false);
+            lastLoadStart = 0;
+            lastLoadEnd = -1;
+            // 根据当前翻页模式应用展示方式
+            applyPageMode();
+        });
+
+        // --- 列表渲染 ---
+        function renderPlaylist(isReset = true) {
+            if(isReset) playlistList.innerHTML = '';
+            const frag = document.createDocumentFragment();
+            
+            const obs = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if(entry.isIntersecting) {
+                        loadThumb(entry.target);
+                        obs.unobserve(entry.target);
+                    }
+                });
+            }, { root: playlistList, rootMargin: "200px" });
+
+            const start = isReset ? 0 : playlistList.children.length;
+            for(let i=start; i<fileList.length; i++) {
+                const li = document.createElement('li');
+                li.className = i===currentIndex?'list-item active':'list-item';
+                li.onclick = () => {
+                    currentIndex = i;
+                    if (config.pageMode === 'continuous') {
+                        scrollToIndex(currentIndex);
+                        updateMetadataData(currentIndex + 1, fileList.length, fileList[currentIndex]);
+                        updatePlaylistHighlight();
+                        doPreload();
+                    } else {
+                        loadCurrent();
+                    }
+                };
+                
+                // 容器
+                const box = document.createElement('div');
+                box.className = 'thumb-box'; box.dataset.fileIdx = i;
+                obs.observe(box);
+                
+                // 文件名
+                const span = document.createElement('span');
+                span.className = 'file-name-list'; span.innerText = fileList[i].name;
+                
+                li.appendChild(box); li.appendChild(span);
+                frag.appendChild(li);
+            }
+            playlistList.appendChild(frag);
+            if(isReset) updatePlaylistHighlight();
+        }
+
+        function loadThumb(box) {
+            const f = fileList[box.dataset.fileIdx];
+            const url = URL.createObjectURL(f);
+            if(config.useDynamicThumbs) {
+                const img = document.createElement('img');
+                img.className = 'thumb-img'; img.src = url;
+                box.appendChild(img);
+            } else {
+                const c = document.createElement('canvas');
+                c.className = 'thumb-canvas'; c.width=200; c.height=200;
+                const ctx = c.getContext('2d');
+                const img = new Image();
+                img.src = url;
+                img.onload = () => {
+                    const r = Math.min(200/img.width, 200/img.height);
+                    const w=img.width*r, h=img.height*r;
+                    ctx.drawImage(img, (200-w)/2, (200-h)/2, w, h);
+                    img.src=""; URL.revokeObjectURL(url);
+                };
+                box.appendChild(c);
+            }
+        }
+
+        function updatePlaylistHighlight() {
+            const items = playlistList.children;
+            for(let i=0; i<items.length; i++) items[i].classList.remove('active');
+            const curr = items[currentIndex];
+            if(curr) {
+                curr.classList.add('active');
+                if(playlistPanel.classList.contains('open')) {
+                    curr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+        }
+
+        // --- 交互控制 ---
+        function nextImage() {
+            if (fileList.length === 0) return;
+            if (config.pageMode === 'continuous') {
+                currentIndex = (currentIndex + 1) % fileList.length;
+                scrollToIndex(currentIndex);
+                updateMetadataData(currentIndex + 1, fileList.length, fileList[currentIndex]);
+                updatePlaylistHighlight();
+                doPreload();
+            } else {
+                currentIndex = (currentIndex + 1) % fileList.length;
+                loadCurrent();
+            }
+        }
+        function prevImage() {
+            if (fileList.length === 0) return;
+            if (config.pageMode === 'continuous') {
+                currentIndex = (currentIndex - 1 + fileList.length) % fileList.length;
+                scrollToIndex(currentIndex);
+                updateMetadataData(currentIndex + 1, fileList.length, fileList[currentIndex]);
+                updatePlaylistHighlight();
+                doPreload();
+            } else {
+                currentIndex = (currentIndex - 1 + fileList.length) % fileList.length;
+                loadCurrent();
+            }
+        }
+        
+        const btnPlay = document.getElementById('btn-play');
+        btnPlay.onclick = () => {
+            isPlaying = !isPlaying;
+            if(isPlaying) {
+                btnPlay.innerText = "⏸"; btnPlay.classList.add('active-btn');
+                nextImage();
+                playTimer = setInterval(nextImage, parseFloat(document.getElementById('interval-input').value)*1000);
+            } else {
+                btnPlay.innerText = "▶"; btnPlay.classList.remove('active-btn');
+                clearInterval(playTimer);
+            }
+        };
+
+        document.getElementById('btn-next').onclick = nextImage;
+        document.getElementById('btn-prev').onclick = prevImage;
+        
+        const toggleList = () => {
+            playlistPanel.classList.toggle('open');
+            settingsPanel.classList.remove('open');
+            if(playlistPanel.classList.contains('open')) updatePlaylistHighlight();
+        };
+        document.getElementById('btn-toggle-list').onclick = toggleList;
+        document.getElementById('btn-close-list').onclick = () => playlistPanel.classList.remove('open');
+        document.getElementById('btn-settings').onclick = () => { settingsPanel.classList.toggle('open'); playlistPanel.classList.remove('open'); };
+        document.getElementById('btn-close-settings').onclick = () => settingsPanel.classList.remove('open');
+        
+        document.getElementById('btn-fullscreen').onclick = () => {
+            if(!document.fullscreenElement) document.documentElement.requestFullscreen().catch(console.error);
+            else if(document.exitFullscreen) document.exitFullscreen();
+        };
+
+        const sc = ['fit-contain','fit-cover','fit-none'];
+        document.getElementById('btn-scale').onclick = () => {
+            resetZoom();
+            layerA.className = `viewer-layer ${sc[(scaleMode+1)%3]}`;
+            layerB.className = `viewer-layer ${sc[(scaleMode+1)%3]}`;
+            if(activeLayer===0) layerA.classList.add('active'); else layerB.classList.add('active');
+            scaleMode = (scaleMode+1)%3;
+        };
+
+        document.getElementById('btn-hide-mode').onclick = () => {
+            isHiddenMode = !isHiddenMode;
+            if(isHiddenMode) { document.getElementById('controls-container').classList.add('hidden-mode'); document.body.classList.add('hidden-mode-active'); document.getElementById('btn-hide-mode').innerText="🔒"; }
+            else { document.getElementById('controls-container').classList.remove('hidden-mode'); document.body.classList.remove('hidden-mode-active'); document.getElementById('btn-hide-mode').innerText="👁"; }
+        };
+
+        // 快捷键
+        document.addEventListener('keydown', (e) => {
+            // 如果正在设置快捷键，则忽略
+            if(document.querySelector('.key-btn.recording')) return;
+            // 如果焦点在输入框/下拉框/文本区域内，则不响应全局快捷键，避免干扰
+            const el = e.target || document.activeElement;
+            if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA')) return;
+            if(fileList.length === 0) return;
+            const k = e.key;
+            const map = config.keyMap;
+
+            // helper: check if pressed key matches configured key(s)
+            const matches = (confVal) => {
+                if (!confVal) return false;
+                if (Array.isArray(confVal)) {
+                    return confVal.some(v => String(v).toLowerCase() === k.toLowerCase());
+                }
+                return String(confVal).toLowerCase() === k.toLowerCase();
+            };
+
+            if(matches(map.info)) { e.preventDefault(); globalInfoVisible = !globalInfoVisible; updateMetadataUI(); return; }
+            // 空格暂停/播放
+            if(k === ' ') { e.preventDefault(); btnPlay.click(); return; }
+            // Ctrl+0 重置缩放
+            if(k === '0' && e.ctrlKey) { e.preventDefault(); resetZoom(); return; }
+            // 下一张/上一张
+            if(matches(map.next)) { nextImage(); return; }
+            if(matches(map.prev)) { prevImage(); return; }
+            // 切换列表
+            if(matches(map.toggleList)) { toggleList(); return; }
+            // 设置
+            if(matches(map.settings)) { document.getElementById('btn-settings').click(); return; }
+            // 全屏
+            if(matches(map.fullscreen)) { document.getElementById('btn-fullscreen').click(); return; }
+        });
+
+        mainArea.addEventListener('click', () => {
+            // 如果设置面板处于打开状态，先应用翻页模式选择
+            if (settingsPanel.classList.contains('open')) {
+                const flipSelect = document.getElementById('cfg-flip-mode');
+                if (flipSelect) {
+                    const val = flipSelect.value;
+                    if (val && val !== config.pageMode) {
+                        config.pageMode = val;
+                        saveConfig();
+                        applyPageMode();
+                    }
+                }
+            }
+            settingsPanel.classList.remove('open');
+            playlistPanel.classList.remove('open');
+        });
+        settingsPanel.onmousedown = e => e.stopPropagation();
+        playlistPanel.onmousedown = e => e.stopPropagation();
+        document.getElementById('controls-container').onmousedown = e => e.stopPropagation();
+
+        init();
+    </script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mini Game</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/@picocss/pico@1.*/css/pico.min.css"
+    />
+  </head>
+
+  <body>
+    <main class="container">
+      <nav>
+        <ul>
+          <li><a href="/">← Back</a></li>
+        </ul>
+      </nav>
+
+      <h1>Mini Game</h1>
+      <p>目标：在 10 秒内尽可能多点击按钮。</p>
+
+      <article>
+        <p>
+          <strong>Time:</strong> <span id="time">10</span>s
+          <strong style="margin-left: 1rem">Score:</strong>
+          <span id="score">0</span>
+        </p>
+        <button id="btn" class="contrast">Click me</button>
+        <button id="reset" class="outline" style="margin-left: 0.5rem">
+          Reset
+        </button>
+      </article>
+    </main>
+
+    <script>
+      const timeEl = document.getElementById("time");
+      const scoreEl = document.getElementById("score");
+      const buttonEl = document.getElementById("btn");
+      const resetEl = document.getElementById("reset");
+
+      let timeLeft = 10;
+      let score = 0;
+      let timerId = null;
+
+      function render() {
+        timeEl.textContent = String(timeLeft);
+        scoreEl.textContent = String(score);
+        buttonEl.disabled = timeLeft <= 0;
+      }
+
+      function stop() {
+        if (timerId) clearInterval(timerId);
+        timerId = null;
+      }
+
+      function start() {
+        stop();
+        timerId = setInterval(() => {
+          timeLeft -= 1;
+          if (timeLeft <= 0) stop();
+          render();
+        }, 1000);
+      }
+
+      function reset() {
+        timeLeft = 10;
+        score = 0;
+        render();
+        start();
+      }
+
+      buttonEl.addEventListener("click", () => {
+        if (timeLeft <= 0) return;
+        score += 1;
+        render();
+      });
+
+      resetEl.addEventListener("click", reset);
+      reset();
+    </script>
+  </body>
+  
+</html>
+
