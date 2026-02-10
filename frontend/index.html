@@ -12,10 +12,11 @@
     <!-- 请求服务端本地下载好的 Pico.css 和 Vue cdn -->
     <!-- 文件的传输交给nginx，配置里有配置的通配路由 “/” -->
     <link rel="stylesheet" href="./assets/pico.min.css">
-    <script src="./assets/vue.global.js"></script>
+    <script src="assets/vue.global.js"></script>
     <!-- 个人css样式即js脚本 -->
-    <link rel="stylesheet" href="./style.css">
-    <script src="./vue.js"></script>
+     <!-- defer延时执行：后台下载脚本, 等整个页面（DOM）都解析好了再运行 -->
+    <link rel="stylesheet" href="style.css">
+    <script src="vue.js" defer></script>
 
 
 </head>
@@ -136,5 +137,7 @@
     </div>
 
 </body>
+
+
 
 </html>

@@ -1,60 +1,76 @@
 
 // JS 脚本部分
 const { createApp } = Vue
-createApp({  // 创建一个 Vue 应用实例
-    
-    data() {  // 状态仓库。定义了 loading、profile 等变量
-        return {  // Vue 会监控这些变量，一变页面就自动刷
-            currentTab: 'home', // 默认显示主页
-            profile: null,
-            loading: false,
-            systemStatus: null,
-        }
-    },
-    mounted() {  // 生命周期钩子, 相当于 Python 类的 __init__ 或“开机启动项”
-        // 页面加载完那一瞬间，自动执行 fetchProfile() 去拉后端数据。
-        this.fetchProfile()
-    },
-    methods: {  // 核心逻辑函数
 
-        // 切换 Tab 的逻辑
-        switchTab(tabName) {
-            this.currentTab = tabName
-            // 如果切换到了 'status' 且没有数据，才去通过fetchStatus()请求
-            if (tabName === 'status' && !this.systemStatus) {
-                this.fetchStatus()
-            }
-        },
+createApp({  // 创建 Vue 应用实例
 
-        // 获取个人信息
-        async fetchProfile() {
+    setup() {  // Vue 3 的“大脑”，所有逻辑都写在这里
+        
+        // 🏗️ 模块 1: 个人档案逻辑 (原有功能)
+        const currentTab = ref('home');
+        const profile = ref(null);
+
+        // 定义切换 Tab 的函数
+        const switchTab = (tab) => {
+            currentTab.value = tab;
+        };
+
+        // 获取个人信息的函数
+        const fetchProfile = async () => {
             try {
-                const res = await fetch('/api/profile')
-                if (res.ok) this.profile = await res.json()
-            } catch (e) {
-                console.error(e)
-            }
-        },
-
-        // 获取系统状态 (点击 Tab 2 时触发)
-        async fetchStatus() {
-            this.systemStatus = null // 先清空，显示 loading
-            try {
-                const res = await fetch('/api/status')
+                // 这里的 api 路径要确保正确
+                const res = await fetch('/api/profile');
                 if (res.ok) {
-                    this.systemStatus = await res.json()
+                    profile.value = await res.json();
+                } else {
+                    // 如果后端没通，给个假数据方便测试布局
+                    profile.value = { name: "Alioth", role: "DevOps Engineer (Offline Mode)" };
                 }
             } catch (e) {
-                console.error("Status fetch failed", e)
+                console.error("API Error:", e);
+                profile.value = { name: "Alioth", role: "Network Error" };
             }
-        },
+        };
 
-        // 辅助函数：CPU 负载过高变红
-        getLoadColor(percent) {
-            if (percent > 80) return '#e74c3c' // 红
-            if (percent > 50) return '#f39c12' // 橙
-            return '#2ecc71' // 绿
-        }
+        // 🎵 模块 2: 音乐播放器逻辑 (新功能)
+        const isMusicPlaying = ref(false); // 记录播放状态
+        const audioPlayer = ref(null);     // 对应 HTML 里的 ref="audioPlayer"
 
+        const toggleAudio = () => {
+            const player = audioPlayer.value;
+            if (!player) return; // 找不到元素就退出
+
+            if (isMusicPlaying.value) {
+                player.pause(); // 暂停
+            } else {
+                player.volume = 0.3; // 设置音量 30%
+                // 尝试播放 (处理浏览器自动播放策略)
+                player.play().catch(err => {
+                    console.warn("自动播放被拦截:", err);
+                    alert("请先点击页面任意位置！");
+                });
+            }
+            // 状态取反
+            isMusicPlaying.value = !isMusicPlaying.value;
+        };
+
+        // 🚀 初始化: 页面加载后自动执行
+        onMounted(() => {
+            fetchProfile(); // 页面一加载就去拉取个人信息
+            console.log("App mounted!");
+        });
+
+        // 📦 暴露给 HTML: 这里列出的变量才能在 HTML 里用
+        return {
+            // 档案模块
+            currentTab,
+            profile,
+            switchTab,
+            // 音乐模块
+            isMusicPlaying,
+            audioPlayer,
+            toggleAudio
+        };
     }
-}).mount('#app')
+}).mount('#app'); // 挂载到 index.html 里的 <div id="app">
+
