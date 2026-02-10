@@ -103,6 +103,48 @@
             transform: scale(1.02);
             border-color: #1976d2;
         }
+
+
+        /* === ZZZ 风格播放器模块 CSS === */
+        .music-widget {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999; /* 保证永远在最上层 */
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            background: rgba(0, 0, 0, 0.6); /* 半透明黑底，提升对比度 */
+            padding: 5px;
+            border-radius: 50px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .music-widget:hover {
+            transform: scale(1.1); /* 鼠标悬停放大 */
+            background: rgba(0, 0, 0, 0.8);
+        }
+
+        .music-disc {
+            font-size: 32px; /* 图标大小 */
+            line-height: 1;
+            display: block;
+            user-select: none;
+            filter: grayscale(100%); /* 默认灰色，表示未激活 */
+            transition: filter 0.5s ease;
+        }
+
+        /* 播放时的状态：彩色 + 旋转 */
+        .music-widget.playing .music-disc {
+            filter: grayscale(0%);
+            animation: spin 3s linear infinite; /* 3秒转一圈 */
+        }
+
+        /* 旋转动画定义 */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
     </style>
 
 </head>
@@ -112,6 +154,20 @@
    <!-- ID 名起为 app, 将此处作为挂载点。Vue.js 运行后会解析这个 div 内部的所有内容。 -->
     <div id="app" class="container">
         
+
+        <div class="music-widget" 
+            :class="{ playing: isMusicPlaying }" 
+            @click="toggleAudio"
+            title="点击播放/暂停背景音乐">
+            
+            <span class="music-disc">💿</span>
+            
+            <audio ref="audioPlayer" loop preload="auto">
+                <source src="assets/bgm.mp3" type="audio/mpeg">
+                您的浏览器不支持 audio 元素。
+            </audio>
+        </div>
+
         <!-- nav导航栏：绘制顶部的 Tab 切换按钮 -->
         <nav class="nav-tabs">
             <!-- 下面的div标签里一共有 3 个 独立的属性，用空格而不是逗号分隔，因为 HTML 是一种标记语言 (Markup Language)，不是编程语言 -->
@@ -199,10 +255,10 @@
         <div v-if="currentTab === 'tools'" class="white-card">
             <h3>My Tools</h3>
             <div class="grid">
-                <a href="/data/apps/player/" class="tool-link">🎵 音乐播放器</a>
+                <a href="/data/apps/player/" class="tool-link">🎵 播放器</a>
                 <a href="/data/apps/game/" class="tool-link">🎮 网页游戏</a>
                 <a href="/files/" class="tool-link">📂 文件管理</a>
-                <a href="https://github.com/Nisecata1" class="tool-link">📓 Jupyter Lab</a>
+                <a href="https://github.com/Nisecata1" class="tool-link">📓 My Github Page</a>
             </div>
         </div>
 
