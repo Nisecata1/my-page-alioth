@@ -23,22 +23,9 @@
 
 <body>
     
-   <!-- ID 名起为 app, 将此处作为挂载点。Vue.js 运行后会解析这个 div 内部的所有内容。 -->
+    <!-- id=app, 将此处作为挂载点。Vue.js 运行后会解析这个 div 内部的所有内容。 -->
     <div id="app" class="container">
-        
 
-        <div class="music-widget" 
-            :class="{ playing: isMusicPlaying }" 
-            @click="toggleAudio"
-            title="点击播放/暂停背景音乐">
-            
-            <span class="music-disc">💿</span>
-            
-            <audio ref="audioPlayer" loop preload="auto">
-                <source src="assets/bgm.mp3" type="audio/mpeg">
-                您的浏览器不支持 audio 元素。
-            </audio>
-        </div>
 
         <!-- nav导航栏：绘制顶部的 Tab 切换按钮 -->
         <nav class="nav-tabs">
@@ -62,6 +49,19 @@
                 :class="{ active: currentTab === 'tools' }" 
                 @click="switchTab('tools')">
                 🛠️ 工具
+            </div>
+            
+            <div class="music-widget" 
+                :class="{ playing: isMusicPlaying }" 
+                @click="toggleAudio"
+                title="点击播放/暂停背景音乐">
+                
+                <span class="music-disc">💿</span>
+                
+                <audio ref="audioPlayer" loop preload="auto">
+                    <source src="assets/bgm.mp3" type="audio/mpeg">
+                    您的浏览器不支持 audio 元素。
+                </audio>
             </div>
         </nav>
 
@@ -137,7 +137,5 @@
     </div>
 
 </body>
-
-
 
 </html>

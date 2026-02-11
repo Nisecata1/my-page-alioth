@@ -1,6 +1,9 @@
 
 // JS 脚本部分
-const { createApp } = Vue
+
+// 下面的写法是 JavaScript (ES6) 的通用标准：叫“解构赋值”。
+const { createApp, ref, reactive, onMounted, computed } = Vue;  
+// 意思是从 vue 脚本里掏出来几个方法：比如ref()、createApp()等直接赋值给同名变量，省的vue.ref()，直接用ref()就行
 
 createApp({  // 创建 Vue 应用实例
 
