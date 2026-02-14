@@ -1,9 +1,14 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware # 新增：用于处理跨域请求
-from pydantic import BaseModel
-import psutil  # 新增：用于获取系统信息
-import time
+from datetime import datetime, timezone
+import json
 import platform
+from pathlib import Path
+import time
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware  # 用于处理跨域请求
+import psutil                                       # 用于获取系统信息
+from pydantic import BaseModel
+
 
 app = FastAPI()
 
@@ -17,27 +22,71 @@ app.add_middleware(
 )
 # ------------------------------------
 
-# --- 1. 数据模型 ---
-class UserProfile(BaseModel):
-    name: str
-    role: str
-    skills: list[str]
+# 现在开始这些更改需要好好看看
 
-# --- 2. 静态数据 (Tab 1 用) ---
-MY_PROFILE = UserProfile(
-    name="小塔",
-    role="Full Stack Developer",
-    skills=["Python", "Linux", "FastAPI", "Vue.js"]
-)
+SERVICE_NAME = "laplas-backend"
+SERVICE_PROFILE_PATH = Path(__file__).with_name("service_profile.json")
+
+# 后端信息获取失败的兜底
+def make_fallback_service_profile() -> dict:
+    return {
+        "name": "Backend Profile Load Failed",
+        "role": "Cannot read backend/service_profile.json",
+        "skills": []
+    }
+
+
+def load_service_profile() -> dict:
+    fallback = make_fallback_service_profile()
+
+    try:
+        raw_text = SERVICE_PROFILE_PATH.read_text(encoding="utf-8")
+        data = json.loads(raw_text)
+    except Exception:
+        return fallback
+
+    if not isinstance(data, dict):
+        return fallback
+
+    name = data.get("name")
+    role = data.get("role")
+    skills = data.get("skills")
+
+    normalized_name = name.strip() if isinstance(name, str) and name.strip() else fallback["name"]
+    normalized_role = role.strip() if isinstance(role, str) and role.strip() else fallback["role"]
+    normalized_skills = []
+
+    if isinstance(skills, list):
+        normalized_skills = [skill for skill in skills if isinstance(skill, str) and skill.strip()]
+
+    return {
+        "name": normalized_name,
+        "role": normalized_role,
+        "skills": normalized_skills
+    }
+
+# --------------------------------------
+
+
+
+
+
 
 # --- 3. 路由定义 ---
 
-# Tab 1: 获取个人简介
-@app.get("/api/profile", response_model=UserProfile)
-def get_profile():
-    return MY_PROFILE
+# 首页连通性: 返回健康状态 + 后端 profile
+@app.get("/api/health")
+def get_health():
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return {
+        "ok": True,
+        "service": SERVICE_NAME,
+        "timestamp": timestamp,
+        "profile": load_service_profile()
+    }
 
-# Tab 2: 获取系统状态 (新增核心功能)
+
+# Tab 2: 获取系统状态
 @app.get("/api/status")
 def get_system_status():
     # 获取内存信息
@@ -80,6 +129,6 @@ def read_root():
     return {
         "message": "Welcome to Laplas API backend!",
         "docs_url": "/docs",          # FastAPI 自动生成的文档地址
+        "health_url": "/api/health",
         "profile_url": "/api/profile"    # 数据接口地址
     }
-

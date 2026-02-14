@@ -2,102 +2,136 @@
 
 <html lang="zh-CN" data-theme="light">
 
+
 <head>
     <meta charset="UTF-8">
     <!-- 移动端视口设置，让页面按设备宽度渲染，初始缩放 1 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- 浏览器标签页标题/收藏夹名称/搜索结果标题 -->
     <title>Nadir' Homepage</title>
-    
+
     <!-- 请求服务端本地下载好的 Pico.css 和 Vue cdn -->
     <!-- 文件的传输交给nginx，配置里有配置的通配路由 “/” -->
     <link rel="stylesheet" href="./assets/pico.min.css">
     <script src="assets/vue.global.js"></script>
     <!-- 个人css样式即js脚本 -->
-     <!-- defer延时执行：后台下载脚本, 等整个页面（DOM）都解析好了再运行 -->
+    <!-- defer延时执行：后台下载脚本, 等整个页面（DOM）都解析好了再运行 -->
     <link rel="stylesheet" href="style.css">
     <script src="vue.js" defer></script>
 
-
 </head>
 
-<body>
-    
-    <!-- id=app, 将此处作为挂载点。Vue.js 运行后会解析这个 div 内部的所有内容。 -->
-    <div id="app" class="container">
 
+<body>
+
+    <!-- 以app作为挂载点，Vue.js 运行后会找到这个id，解析 div 的所有内容。 -->
+    <div id="app" class="container" v-cloak>
 
         <!-- nav导航栏：绘制顶部的 Tab 切换按钮 -->
         <nav class="nav-tabs">
-            <!-- 下面的div标签里一共有 3 个 独立的属性，用空格而不是逗号分隔，因为 HTML 是一种标记语言 (Markup Language)，不是编程语言 -->
-            <!-- active: currentTab === 'home' : Vue 特有属性（指令）。如果 currentTab == "home"，则在原本 class = nav-item 的基础上多加一个 active 类 -->
-            <!-- click 也是 Vue 特有属性（事件），意思是当用户用鼠标点击这里时，执行 switchTab('home') 这段代码 -->
-            <div 
-            class="nav-item" 
-            :class="{ active: currentTab === 'home' }" 
-            @click="switchTab('home')">
-            🏠 主页
+            <!-- :class= : Vue 特有属性（指令）。表示如果 currentTab == "home" (currentTab 由 vue 脚本监听并修改)，则在原本 class = nav-item 的基础上多加一个 active 类 -->
+            <!-- @click= ：也是 Vue 特有属性（事件），意思是当用户用鼠标点击这里时，执行 switchTab('home') 这段代码，switchTab是vue脚本里定义的函数 -->
+            <div class="nav-item" :class="{ active: currentTab === 'home' }" @click="switchTab('home')">
+                🏠 主页
             </div>
-            <div 
-                class="nav-item" 
-                :class="{ active: currentTab === 'status' }" 
-                @click="switchTab('status')">
+            <div class="nav-item" :class="{ active: currentTab === 'status' }" @click="switchTab('status')">
                 ⚡ 监控
             </div>
-            <div 
-                class="nav-item" 
-                :class="{ active: currentTab === 'tools' }" 
-                @click="switchTab('tools')">
+            <div class="nav-item" :class="{ active: currentTab === 'tools' }" @click="switchTab('tools')">
                 🛠️ 工具
-            </div>
-            
-            <div class="music-widget" 
-                :class="{ playing: isMusicPlaying }" 
-                @click="toggleAudio"
-                title="点击播放/暂停背景音乐">
-                
-                <span class="music-disc">💿</span>
-                
-                <audio ref="audioPlayer" loop preload="auto">
-                    <source src="assets/bgm.mp3" type="audio/mpeg">
-                    您的浏览器不支持 audio 元素。
-                </audio>
             </div>
         </nav>
 
+        <!-- home页渲染 -->
         <div v-if="currentTab === 'home'" class="white-card">
+
+            <!-- 先渲染 name 和 role，并提前显示Loading... -->
             <hgroup style="text-align: center; margin-bottom: 30px;">
                 <h1>{{ profile ? profile.name : 'Loading...' }}</h1>
-                <p>{{ profile ? profile.role : 'Connecting to Server...' }}</p>
+                <p>{{ profile ? profile.role : 'Reading profile.json...' }}</p>
             </hgroup>
-            
+
+            <!-- 渲染 profile 里的其他内容（profile 是 vue.js 的 return 对象之一） -->
             <div v-if="profile">
-                <p><strong>技能栈:</strong></p>
                 <div>
-                    <span v-for="skill in profile.skills" :key="skill" 
-                          role="button" class="outline" 
-                          style="margin-right: 8px; font-size: 0.8rem; padding: 4px 10px;">
+                    <strong>技能栈:</strong>
+                    <!-- 循环渲染 skill 列表 -->
+                    <span v-for="skill in profile.skills" :key="skill" role="button" class="outline"
+                        style="margin-right: 8px; font-size: 0.8rem; padding: 4px 10px;">
                         {{ skill }}
                     </span>
                 </div>
+                <!-- 多加一个 butten -->
+                <!-- 有 href 就能实现点击跳转 -->
+                <!-- target="_blank"：新标签页打开，rel="noopener noreferrer"：安全属性，防止新页面获取到原页面的 window 对象（避免安全风险） -->
+                <a v-if="profile.github_url" :href="profile.github_url" target="_blank" rel="noopener noreferrer"
+                    role="button" class="contrast" style="margin-top: 20px; display: inline-block;"> 📓 Personal GitHub
+                    Page
+                </a>
             </div>
 
+            <!-- 加载中标签  -->
             <div v-else style="text-align: center; color: #999;">
                 <p aria-busy="true">正在连接个人数据...</p>
             </div>
 
+            <!-- 后端信息卡片 -->
+            <section class="backend-card">
+
+                <p v-if="backendLoading" aria-busy="true">正在检测后端连通性...</p>
+
+                <div class="backend-card-header">
+                    <h4>后端状态</h4>
+                    <span v-if="backendLoading" class="backend-status-pill checking">Checking...</span>
+                    <span v-else-if="backendHealth && backendHealth.ok"
+                        class="backend-status-pill online">Connected</span>
+                    <span v-else class="backend-status-pill offline">Offline</span>
+                </div>
+
+                <div v-if="backendHealth && backendHealth.ok">
+
+                    <p class="backend-meta">
+                        Service: {{ backendHealth.service }}<br>
+                        Updated: {{ backendHealth.timestamp || 'N/A' }}
+                    </p>
+
+                    <p><strong>{{ backendProfile ? backendProfile.name : 'Backend Profile' }}</strong></p>
+                    <p>{{ backendProfile ? backendProfile.role : '' }}</p>
+
+                    <div v-if="backendProfile && backendProfile.skills.length" class="backend-skill-list">
+                        <span v-for="skill in backendProfile.skills" :key="`backend-${skill}`"
+                            class="backend-skill-item">
+                            {{ skill }}
+                        </span>
+                    </div>
+                </div>
+
+                <div v-else>
+                    <p>后端未连接：{{ backendError || 'Cannot connect to backend service.' }}</p>
+                </div>
+
+                <button @click="fetchBackendHealth" class="secondary outline backend-refresh-btn">
+                    重新检测后端
+                </button>
+
+            </section>
+
         </div>
-        
+
+
         <div v-if="currentTab === 'status'" class="white-card">
             <h3 style="border-bottom: 1px solid #eee; padding-bottom: 10px;">Server Status</h3>
-            
+
+            <!-- 如果systemStatus()有返回值则显示 -->
             <div v-if="systemStatus" class="stats-grid">
+
                 <div class="stat-box">
                     <div class="stat-label">CPU Load</div>
                     <div class="stat-value" :style="{ color: getLoadColor(systemStatus.cpu_percent) }">
                         {{ systemStatus.cpu_percent }}%
                     </div>
                 </div>
+
                 <div class="stat-box">
                     <div class="stat-label">RAM Usage</div>
                     <div class="stat-value">
@@ -105,23 +139,28 @@
                     </div>
                     <small>{{ systemStatus.ram_used }} / {{ systemStatus.ram_total }}</small>
                 </div>
+
                 <div class="stat-box">
                     <div class="stat-label">Temperature</div>
                     <div class="stat-value">{{ systemStatus.temperature }}</div>
                 </div>
+
                 <div class="stat-box">
                     <div class="stat-label">Uptime</div>
                     <div class="stat-value" style="font-size: 1.2rem;">{{ systemStatus.uptime }}</div>
                 </div>
+
             </div>
 
             <div v-else style="text-align: center; padding: 40px;">
-                <p aria-busy="true">正在读取硬件传感器...</p>
+                <p v-if="statusError">{{ statusError }}</p>
+                <p v-else aria-busy="true">正在读取硬件传感器...</p>
             </div>
 
             <button @click="fetchStatus" class="secondary outline" style="margin-top: 20px; width: 100%;">
                 刷新数据
             </button>
+
         </div>
 
         <div v-if="currentTab === 'tools'" class="white-card">
@@ -130,7 +169,7 @@
                 <a href="/data/apps/player/" class="tool-link">🎵 播放器</a>
                 <a href="/data/apps/game/" class="tool-link">🎮 网页游戏</a>
                 <a href="/files/" class="tool-link">📂 文件管理</a>
-                <a href="https://github.com/Nisecata1" class="tool-link">📓 My Github Page</a>
+                <a href="/entertainment/" class="tool-link">🎭 个人娱乐主页（建设中）</a>
             </div>
         </div>
 

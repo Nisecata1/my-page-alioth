@@ -1,0 +1,135 @@
+
+<!-- 注意：娱乐主页这是 -->
+
+<!DOCTYPE html>
+
+<html lang="zh-CN" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <!-- 移动端视口设置，让页面按设备宽度渲染，初始缩放 1 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 浏览器标签页标题/收藏夹名称/搜索结果标题 -->
+    <title>cata娱乐主页</title>
+    
+    <!-- 请求服务端本地下载好的 Pico.css 和 Vue cdn -->
+    <!-- 文件的传输交给nginx，配置里有配置的通配路由 “/” -->
+    <link rel="stylesheet" href="./assets/pico.min.css">
+    <script src="assets/vue.global.js"></script>
+    <!-- 个人css样式即js脚本 -->
+     <!-- defer延时执行：后台下载脚本, 等整个页面（DOM）都解析好了再运行 -->
+    <link rel="stylesheet" href="style.css">
+    <script src="vue.js" defer></script>
+
+</head>
+
+<body>
+    
+    <!-- 以app作为挂载点，Vue.js 运行后会找到这个id，解析 div 的所有内容。 -->
+    <div id="app" class="container" v-cloak>
+
+        <!-- nav导航栏：绘制顶部的 Tab 切换按钮 -->
+        <nav class="nav-tabs">
+            <!-- :class= : Vue 特有属性（指令）。表示如果 currentTab == "home"(currentTab由vue脚本监听并修改)，则在原本 class = nav-item 的基础上多加一个 active 类 -->
+            <!-- @click= ：也是 Vue 特有属性（事件），意思是当用户用鼠标点击这里时，执行 switchTab('home') 这段代码，switchTab是vue脚本里定义的函数 -->
+            <div 
+            class="nav-item" 
+            :class="{ active: currentTab === 'home' }" 
+            @click="switchTab('home')">
+            🏠 主页
+            </div>
+            <div 
+                class="nav-item" 
+                :class="{ active: currentTab === 'status' }" 
+                @click="switchTab('status')">
+                ⚡ 监控
+            </div>
+            <div 
+                class="nav-item" 
+                :class="{ active: currentTab === 'tools' }" 
+                @click="switchTab('tools')">
+                🛠️ 工具
+            </div>
+        </nav>
+
+        <!-- 换页逻辑 -->
+        <div v-if="currentTab === 'home'" class="white-card">
+            <hgroup style="text-align: center; margin-bottom: 30px;">
+                <h1>{{ profile ? profile.name : 'Loading...' }}</h1>
+                <p>{{ profile ? profile.role : 'Connecting to Server...' }}</p>
+            </hgroup>
+            
+            <!-- 当profile == true -->
+            <div v-if="profile">
+                <p><strong>技能栈:</strong></p>
+                <div>
+                    <span v-for="skill in profile.skills" :key="skill" 
+                          role="button" class="outline" 
+                          style="margin-right: 8px; font-size: 0.8rem; padding: 4px 10px;">
+                        {{ skill }}
+                    </span>
+                </div>
+                <div v-if="profile.github_url" style="margin-top: 16px;">
+                    <a :href="profile.github_url" target="_blank" rel="noopener noreferrer" role="button" class="contrast">
+                        📓 Personal GitHub Page
+                    </a>
+                </div>
+            </div>
+
+            <div v-else style="text-align: center; color: #999;">
+                <p aria-busy="true">正在连接个人数据...</p>
+            </div>
+
+        </div>
+        
+        <div v-if="currentTab === 'status'" class="white-card">
+            <h3 style="border-bottom: 1px solid #eee; padding-bottom: 10px;">Server Status</h3>
+            
+            <div v-if="systemStatus" class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-label">CPU Load</div>
+                    <div class="stat-value" :style="{ color: getLoadColor(systemStatus.cpu_percent) }">
+                        {{ systemStatus.cpu_percent }}%
+                    </div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">RAM Usage</div>
+                    <div class="stat-value">
+                        {{ systemStatus.ram_percent }}%
+                    </div>
+                    <small>{{ systemStatus.ram_used }} / {{ systemStatus.ram_total }}</small>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Temperature</div>
+                    <div class="stat-value">{{ systemStatus.temperature }}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Uptime</div>
+                    <div class="stat-value" style="font-size: 1.2rem;">{{ systemStatus.uptime }}</div>
+                </div>
+            </div>
+
+            <div v-else style="text-align: center; padding: 40px;">
+                <p aria-busy="true">正在读取硬件传感器...</p>
+            </div>
+
+            <button @click="fetchStatus" class="secondary outline" style="margin-top: 20px; width: 100%;">
+                刷新数据
+            </button>
+        </div>
+
+        <div v-if="currentTab === 'tools'" class="white-card">
+            <h3>My Tools</h3>
+            <div class="grid">
+                <a href="/data/apps/player/" class="tool-link">🎵 播放器</a>
+                <a href="/data/apps/game/" class="tool-link">🎮 网页游戏</a>
+                <a href="/files/" class="tool-link">📂 文件管理</a>
+                <a href="/entertainment/" class="tool-link">🎭 个人娱乐主页（建设中）</a>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+
+</html>

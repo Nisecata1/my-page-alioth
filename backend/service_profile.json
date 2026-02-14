@@ -1,0 +1,10 @@
+{
+  "name": "说明",
+  "role": "用于测试后端功能，并学习后端开发项目",
+  "skills": [
+    "FastAPI",
+    "Python",
+    "psutil",
+    "Nginx"
+  ]
+}

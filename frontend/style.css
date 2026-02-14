@@ -1,5 +1,8 @@
 
 
+/* 带 v-cloak 属性的标签会被隐藏: 比如在 <div id="app" v-cloak> 上加上这个属性。当 Vue 实例加载完毕并接管页面后，它会自动删除这个属性。 */
+[v-cloak] { display: none; }
+
 /* class="..."即 HTML 属性。相当于给元素起个绰号（用来通过 CSS 化妆）。 */
 /* --- 核心布局样式 --- */
 body {
@@ -33,7 +36,6 @@ body {
     border-radius: 10px;
     transition: all 0.2s;
 }
-
 /* 选中状态 */
 .nav-item.active {
     background-color: #e3f2fd; /* 浅蓝色高亮 */
@@ -90,42 +92,88 @@ body {
 }
 
 
-/* === ZZZ 风格播放器模块 CSS === */
-.music-widget {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 9999; /* 保证永远在最上层 */
-    cursor: pointer;
-    transition: transform 0.2s ease;
-    background: rgba(0, 0, 0, 0.6); /* 半透明黑底，提升对比度 */
-    padding: 5px;
-    border-radius: 50px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+
+
+
+
+/* Home 底部后端连通卡片 */
+.backend-card {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid #edf1f4;
 }
 
-.music-widget:hover {
-    transform: scale(1.1); /* 鼠标悬停放大 */
-    background: rgba(0, 0, 0, 0.8);
+.backend-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
 }
 
-.music-disc {
-    font-size: 32px; /* 图标大小 */
-    line-height: 1;
-    display: block;
-    user-select: none;
-    filter: grayscale(100%); /* 默认灰色，表示未激活 */
-    transition: filter 0.5s ease;
+.backend-card-header h4 {
+    margin: 0;
 }
 
-/* 播放时的状态：彩色 + 旋转 */
-.music-widget.playing .music-disc {
-    filter: grayscale(0%);
-    animation: spin 3s linear infinite; /* 3秒转一圈 */
+.backend-status-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    padding: 4px 10px;
 }
 
-/* 旋转动画定义 */
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+.backend-status-pill.online {
+    color: #156d3a;
+    background: #e7f6ee;
+}
+
+.backend-status-pill.offline {
+    color: #a22a22;
+    background: #ffeceb;
+}
+
+.backend-status-pill.checking {
+    color: #5f6368;
+    background: #eef1f4;
+}
+
+.backend-meta {
+    color: #68737d;
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+}
+
+.backend-skill-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.backend-skill-item {
+    background: #eef6ff;
+    border: 1px solid #d5e8ff;
+    color: #175ea6;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    padding: 4px 10px;
+}
+
+.backend-refresh-btn {
+    margin-top: 16px;
+    width: 100%;
+}
+
+@media (max-width: 640px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .backend-card-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
 }
